@@ -1,9 +1,10 @@
-def live_session_ratio(logins, now_ms, poll_interval_ms):
+def live_session_ratio(logins, now_ms, poll_interval_ms, grace=2.0):
     if not logins:
         return 0.0
+    threshold = poll_interval_ms * grace
     live = sum(1 for l in logins
                if l.get("authenticated")
-               and now_ms - l.get("last_sync_ms", 0) <= poll_interval_ms)
+               and now_ms - l.get("last_sync_ms", 0) <= threshold)
     return live / len(logins)
 
 def reauth_share(logins):
