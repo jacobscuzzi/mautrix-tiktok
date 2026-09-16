@@ -6,3 +6,5 @@ __pycache__/
 venv/
 secrets/
 *.session
+state.json
+sessions/
