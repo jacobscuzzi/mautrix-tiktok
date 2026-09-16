@@ -24,7 +24,7 @@ class _DemoPassport:
 
 def main(argv=None):
     argv = argv or sys.argv[1:]
-    mode = argv[0] if argv else "qr"
+    mode = argv[0] if argv else "email"
     dev = Device.generate()
     store = SessionStore("./sessions", master_key=b"0" * 32)
     email_flow = EmailCodeFlow(_DemoPassport(dev), "j.baumfalk@yahoo.de")
