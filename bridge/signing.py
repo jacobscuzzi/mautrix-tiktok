@@ -1,3 +1,4 @@
+import base64
 import json
 import subprocess
 from typing import Protocol
@@ -17,6 +18,7 @@ class SubprocessSigner:
     def sign(self, method, path, query, body, device):
         req = json.dumps({
             "method": method, "path": path, "query": query,
+            "body_b64": base64.b64encode(body or b"").decode(),
             "cookie": device.cookie_string(),
             "device_id": device.device_id, "install_id": device.install_id,
         }).encode()
