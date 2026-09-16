@@ -1,0 +1,7 @@
+# Copy to config.yaml; real secrets come from a secrets manager / env, not here.
+master_key_env: BRIDGE_MASTER_KEY   # 32-byte key, base64, from KMS in production
+signer_cmd: ["python3", "signer/signerpy_shim.py"]   # external SignerPy process
+base_host: api16-normal-c-useast2a.tiktokv.com
+poll_interval_seconds: 30
+session_dir: ./sessions
+proxy: ""   # per-user residential proxy, geo-matched; empty = direct
