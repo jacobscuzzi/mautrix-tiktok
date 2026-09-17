@@ -21,3 +21,13 @@ class TestMetrics(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMetricsGrace(unittest.TestCase):
+    def test_grace_window_keeps_recent_sync_live(self):
+        now = 1_000_000
+        interval = 60_000
+        # synced 90s ago: stale at 1x interval, live within 2x grace
+        logins = [{"authenticated": True, "last_sync_ms": now - 90_000, "state": "connected"}]
+        self.assertEqual(metrics.live_session_ratio(logins, now, interval, grace=1.0), 0.0)
+        self.assertEqual(metrics.live_session_ratio(logins, now, interval, grace=2.0), 1.0)
