@@ -74,9 +74,10 @@ p95**, to catch silent polling lag while sessions stay alive.
 
 ## What is not built
 
-- The signing algorithm itself. It is isolated behind `Signer`; `SubprocessSigner`
-  shells to an external SignerPy process so a rotated algorithm is swapped without
-  touching bridge logic.
+- The signing algorithm itself is third-party (SignerPy), isolated behind
+  `Signer`; `SubprocessSigner` shells to it via `signer/signerpy_shim.py` so a
+  rotated algorithm is swapped without touching bridge logic. Verified live:
+  SignerPy-signed requests are accepted by TikTok (they reach business logic).
 - IM body payload parsing (`IM._parse_conv_list` / `_parse_messages` return `[]`).
   The conversation/message body field shapes are best-effort until captured from a
   live authenticated session (see `DESIGN.md` §0); the sync engine is fully tested
