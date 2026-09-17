@@ -21,3 +21,10 @@ class TestSigning(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSignerOutputGuard(unittest.TestCase):
+    def test_non_json_output_raises_signer_stale(self):
+        s = signing.SubprocessSigner(["python3", "-c", "print('not json')"])
+        with self.assertRaises(errors.SignerStale):
+            s.sign("GET", "/v1/x/", "", b"", Device.generate())

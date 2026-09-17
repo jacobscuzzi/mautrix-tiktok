@@ -28,4 +28,7 @@ class SubprocessSigner:
             raise errors.SignerStale(f"signer process error: {e}")
         if out.returncode != 0:
             raise errors.SignerStale(f"signer exit {out.returncode}: {out.stderr.decode()[:200]}")
-        return json.loads(out.stdout)
+        try:
+            return json.loads(out.stdout)
+        except ValueError:
+            raise errors.SignerStale(f"signer output not json: {out.stdout[:200]!r}")
