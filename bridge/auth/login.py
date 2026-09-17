@@ -7,11 +7,12 @@ class LoginStep:
     data: dict = field(default_factory=dict)
 
 class LoginProcess:
-    def __init__(self, device, store, qr_flow, browser_flow):
+    def __init__(self, device, store, qr_flow=None, browser_flow=None, email_flow=None):
         self.device = device
         self.store = store
         self.qr = qr_flow
         self.browser = browser_flow
+        self.email = email_flow
         self.mode = None
         self._token = None
 
@@ -22,6 +23,10 @@ class LoginProcess:
             self._token = info["token"]
             return LoginStep("display_and_wait", "Scan the QR code in your TikTok app",
                              {"qrcode": info["qrcode"]})
+        if mode == "email":
+            self.email.send_code()
+            return LoginStep("user_input", "Enter the code sent to your email",
+                             {"field": "email_code"})
         return LoginStep("cookies", "Log in on TikTok's page")
 
     def advance(self):
@@ -30,7 +35,15 @@ class LoginProcess:
             if res.get("status") != "confirmed":
                 return LoginStep("display_and_wait", "Waiting for scan")
             return self._complete(res["cookies"])
+        if self.mode == "email":
+            return LoginStep("user_input", "Enter the code sent to your email",
+                             {"field": "email_code"})
         res = self.browser.capture()
+        return self._complete(res["cookies"])
+
+    # Called for the email flow once the user has supplied the code.
+    def submit_code(self, code):
+        res = self.email.login(code)
         return self._complete(res["cookies"])
 
     def _complete(self, cookies):
