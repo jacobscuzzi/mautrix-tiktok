@@ -7,3 +7,5 @@ venv/
 secrets/
 *.session
 config.yaml
+state.json
+sessions/
