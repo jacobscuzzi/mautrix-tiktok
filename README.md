@@ -103,3 +103,41 @@ bridge/auth/login.py     QR + browser login state machine
 bridge/metrics.py        Live-Session-Ratio
 bridge/cmd/login.py      CLI to exercise login flows
 ```
+
+## Running the prototype on a server
+
+The prototype runs the full path — config, device, real signing, live request,
+health classification — end to end. It has been verified live: signed requests
+reach TikTok's business logic. The remaining blocker for a completed login is a
+clean per-user IP.
+
+```bash
+# one-time setup (no pip on the host): a venv with the signer
+python3 -m venv .venv
+.venv/bin/python <(curl -s https://bootstrap.pypa.io/get-pip.py)
+.venv/bin/python -m pip install requests cryptography pyyaml
+.venv/bin/python -m pip install "git+https://github.com/is-L7N/SignerPy"
+
+# config.yaml points signer_cmd at the shim (see config.example.yaml)
+python3 -m bridge.cmd.run probe      # prints a health state: connected /
+                                     # im-not-initialized / rate_limited / needs-reauth
+python3 -m bridge.cmd.run run        # poll loop (needs a logged-in session)
+```
+
+Docker: `docker build -t tiktok-bridge .` then
+`docker run --rm -e BRIDGE_MASTER_KEY=$KEY -e BRIDGE_PROXY=$PROXY tiktok-bridge probe`.
+The signer is not baked into the image by default (untrusted third-party code);
+install it explicitly per the Dockerfile comments after reviewing it.
+
+## The IP problem, and how the prototype handles it
+
+TikTok rate-limits and geo-gates by IP. From a datacenter IP the probe returns
+`rate_limited` (passport `error_code 7`) or `needs-reauth` on the IM path, even
+with correct signing — verified live from this server. The fix is not to rotate
+IPs to dodge the limit (that is detection evasion and out of scope); it is the
+design's per-user model: each consented user's session runs through one stable,
+geo-matched residential proxy the operator supplies (`BRIDGE_PROXY`, or a
+`proxies` pool with stable per-login assignment in `bridge/proxy.py`). Rate
+limits are then a handled failure mode: `BridgeApp` backs off rather than
+spinning, and the `rate_limited` health state tells the operator a proxy is
+degraded. The single health metric, Live-Session-Ratio, drops when this happens.

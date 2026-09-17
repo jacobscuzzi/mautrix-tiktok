@@ -1,0 +1,5 @@
+signer_cmd: ["python", "signer/signerpy_shim.py"]
+base_host: api16-normal-c-useast2a.tiktokv.com
+poll_interval_seconds: 30
+session_dir: /data/sessions
+proxies: []

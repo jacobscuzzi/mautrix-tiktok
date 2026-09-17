@@ -1,0 +1,6 @@
+.venv/
+.git/
+sessions/
+config.yaml
+__pycache__/
+*.pyc

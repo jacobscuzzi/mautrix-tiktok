@@ -28,8 +28,11 @@ class Config:
         else:
             master_key = None  # caller decides: refuse in prod, ephemeral in dev
         proxies = raw.get("proxies")
-        if proxies is None:
-            single = raw.get("proxy") or environ.get("BRIDGE_PROXY", "")
+        env_proxy = environ.get("BRIDGE_PROXY", "")
+        if env_proxy:
+            proxies = [env_proxy]
+        elif proxies is None:
+            single = raw.get("proxy") or ""
             proxies = [single] if single else []
         return cls(
             master_key=master_key,
