@@ -9,3 +9,5 @@ secrets/
 config.yaml
 state.json
 sessions/
+.chromium-libs/
+browser-data/
