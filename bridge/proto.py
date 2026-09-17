@@ -50,3 +50,51 @@ def encode_fields(fields):
             out += _write_varint(len(value))
             out += value
     return bytes(out)
+
+
+def _valid_message(buf):
+    # True only if buf parses cleanly as protobuf, consuming every byte with
+    # known wire types. Used to decide whether a bytes field is a nested message.
+    i, n = 0, len(buf)
+    if n == 0:
+        return False
+    try:
+        while i < n:
+            tag, i = read_varint(buf, i)
+            wt = tag & 7
+            if wt == 0:
+                _, i = read_varint(buf, i)
+            elif wt == 2:
+                ln, i = read_varint(buf, i)
+                i += ln
+            elif wt == 5:
+                i += 4
+            elif wt == 1:
+                i += 8
+            else:
+                return False
+    except IndexError:
+        return False
+    return i == n
+
+
+def decode_tree(buf, max_depth=6):
+    # Recursively decode, treating a length-delimited field as a nested message
+    # when it parses cleanly, else as a UTF-8 string, else raw bytes. This is the
+    # tool for mapping captured IM response bodies to field numbers.
+    out = {}
+    for k, vals in decode_fields(buf).items():
+        decoded = []
+        for v in vals:
+            if isinstance(v, int):
+                decoded.append(v)
+            elif max_depth > 0 and _valid_message(v):
+                decoded.append(decode_tree(v, max_depth - 1))
+            else:
+                try:
+                    s = v.decode("utf-8")
+                    decoded.append(s if s.isprintable() or s == "" else v)
+                except UnicodeDecodeError:
+                    decoded.append(v)
+        out[k] = decoded
+    return out

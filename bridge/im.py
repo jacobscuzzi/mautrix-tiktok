@@ -5,6 +5,33 @@ from . import proto
 def _client_message_id():
     return f"{int(time.time() * 1000)}{random.randint(0, 999):03d}"
 
+
+# Response{3:status,6:body,7:log} -> ResponseBody{1:send_message_body} ->
+# SendMessageResponseBody{1:server_message_id,3:status,4:client_message_id,9:new_ticket}.
+# The Response envelope and SendMessageResponseBody field numbers are confirmed
+# from the decompiled IM SDK; ResponseBody field 1 is inferred by mirroring the
+# request side. status_code 0 at the top level means the call was accepted.
+def _parse_send_response(resp, client_message_id):
+    out = {"ok": resp.get("status_code") == 0, "log_id": resp.get("log_id"),
+           "server_message_id": None, "new_ticket": None,
+           "client_message_id": client_message_id}
+    body = resp.get("body")
+    if not body:
+        return out
+    rb = proto.decode_fields(body)
+    inner = rb.get(1)
+    if not inner:
+        return out
+    smb = proto.decode_fields(inner[0])
+    def first(idx):
+        v = smb.get(idx)
+        return v[0] if v else None
+    smid = first(1)
+    out["server_message_id"] = smid.decode() if isinstance(smid, bytes) else smid
+    tk = first(9)
+    out["new_ticket"] = tk.decode() if isinstance(tk, bytes) else tk
+    return out
+
 class IM:
     def __init__(self, client):
         self.c = client
@@ -33,7 +60,8 @@ class IM:
         smb = proto.encode_fields(send_fields)
         request_body = proto.encode_fields({1: smb})
         request = proto.encode_fields({1: 1, 8: request_body})
-        return self.c.post_im("/v1/message/send/", request)
+        resp = self.c.post_im("/v1/message/send/", request)
+        return _parse_send_response(resp, cmid)
 
     def _parse_conv_list(self, resp):
         return []
