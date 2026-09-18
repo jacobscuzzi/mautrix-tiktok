@@ -229,6 +229,11 @@ egress stays a documented lever, not a build target.
 
 ## 11. What is proven, and what is not
 
+- **Runnable demo:** `./bridge-app.sh` starts the bridge (`bridge/live.py` — one
+  Playwright worker per user) + the `wrapper/` tester UI (connect → chats → health).
+  Real TikTok login in a local browser; the account's chats render and DMs stream
+  in live; sessions are envelope-encrypted and wiped on logout.
+
 - **Verified live:** mobile signing accepted by TikTok (blocked only by IP); a
   headless browser loads TikTok + a scannable QR from a datacenter IP; a logged-in
   web capture of the DM surface; the in-page re-signing probe (**the page signs**);

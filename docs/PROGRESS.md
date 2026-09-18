@@ -54,6 +54,9 @@ frontier message parser was corrected against the real layout (was [Inf], now
 [Obs]) and extracts all 10 messages with correct sender attribution.
 ws_inbound_dm is now verified live. Tests: 185.
 
+DEMO APP (2026-09-18): ./bridge-app.sh runs the bridge + tester wrapper (connect ->
+chats -> health) with real TikTok login, encrypted sessions, wipe-on-logout. 191 tests.
+
 STOP CONDITION: checklist complete. Remaining morning gate: real password login
 (G3) + push+tag - they need Jakob. See FINISH-HERE.md.
 NEXT: Task D (API + pipeline + SQLite + demo, and G4 live read-only import), then

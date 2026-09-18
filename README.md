@@ -53,10 +53,32 @@ drops it). Leading indicator **`bridge_password_login_share`** (rising = session
 dying early, precedes bans). Plus `bridge_delivery_lag_seconds` p95 and
 `bridge_error_total{state}`. Prometheus at `GET /metrics`.
 
+## Try it as an app (one command)
+
+```bash
+./bridge-app.sh                 # starts the bridge + the tester wrapper, opens http://127.0.0.1:8770
+```
+
+The wrapper is a small web UI (the "tester") that talks to the bridge over HTTP:
+
+1. **Connect** — a plain-language panel explains exactly how your data is handled,
+   then a real Chromium window opens on TikTok's own login page. You log in there
+   (password or QR); the bridge never sees your password.
+2. **Chats** — once connected, your real contacts, threads and messages sync in and
+   render; new DMs arrive live over the frontier socket.
+3. **Health** — the one production number, Live-Session-Ratio, shown big, with the
+   leading indicator (password-login share), delivery-lag p95, and error states.
+
+The session is envelope-encrypted at rest and **everything is wiped on logout**
+(session, messages, contacts, browser profile). Real login needs a display (WSLg
+`$DISPLAY` on WSL). Run against a throwaway account. The bridge program is
+`bridge/` (API in `bridge/webapp.py`, live browser worker in `bridge/live.py`); the
+wrapper is `wrapper/`.
+
 ## Run it
 
 ```bash
-.venv/bin/python -m unittest discover -s tests      # 183 tests (1 skipped if no browser)
+.venv/bin/python -m unittest discover -s tests      # 191 tests (1 skipped if no browser)
 ./scripts/demo.sh                                   # end-to-end API demo -> docs/demo-transcript.md
 ```
 
@@ -95,7 +117,9 @@ bridge/web/         session, page client (in-page signed fetch), frontier decode
 bridge/providers/   web.py (WebProvider), tikapi.py; provider.py = the MessageProvider seam
 bridge/auth/        login state machine, web_password_login (ladder), web_cookie_import, browser
 bridge/             proto, normalize, sync, state, session_store, pipeline (SQLite), api, app, metrics
-bridge/cmd/         capture, demo, run, login
+bridge/             live.py (browser worker per user), webapp.py (bridge HTTP API + /metrics)
+bridge/cmd/         serve (the demo launcher), capture, demo, run, login
+wrapper/            the tester UI (static/) + proxy server; talks to the bridge API
 scripts/            redact-capture, decode-frontier, export-session, demo.sh, g4_live_sync
 tests/              unittest + fixtures/web/ + fake_platform.py
 docs/               BRIEF, DESIGN, observations/, notes/, DECISIONS, PROGRESS, demo-transcript

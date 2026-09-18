@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TikTok DM Bridge — Tester</title>
+<style>
+  :root{
+    --bg:#0e0f13; --panel:#171922; --panel2:#1f2230; --line:#2a2e3d;
+    --text:#e7e9ef; --muted:#9aa0b4; --accent:#25f4ee; --accent2:#fe2c55;
+    --ok:#3ddc97; --warn:#f5b544; --bad:#fe5b6e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+       background:var(--bg);color:var(--text)}
+  header{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);
+         position:sticky;top:0;background:var(--bg);z-index:5}
+  .logo{font-weight:800;letter-spacing:.3px}
+  .logo b{color:var(--accent)} .logo i{color:var(--accent2);font-style:normal}
+  .tabs{margin-left:auto;display:flex;gap:6px}
+  .tabs button{background:transparent;color:var(--muted);border:1px solid transparent;
+       padding:7px 14px;border-radius:8px;cursor:pointer;font:inherit}
+  .tabs button.active{color:var(--text);background:var(--panel2);border-color:var(--line)}
+  .tabs button:disabled{opacity:.4;cursor:not-allowed}
+  main{max-width:1040px;margin:0 auto;padding:24px 20px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;margin-bottom:18px}
+  h1{font-size:22px;margin:0 0 6px} h2{font-size:15px;margin:0 0 12px;color:var(--muted);
+     text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+  p{color:var(--muted)} .lead{color:var(--text);font-size:16px}
+  button.primary{background:linear-gradient(90deg,var(--accent2),#ff5c85);color:#fff;border:0;
+       padding:12px 22px;border-radius:10px;font:600 15px/1 inherit;cursor:pointer}
+  button.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line);
+       padding:9px 16px;border-radius:9px;cursor:pointer;font:inherit}
+  .sec{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0 4px}
+  .sec .item{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .sec .item b{display:block;color:var(--text);margin-bottom:2px;font-size:14px}
+  .sec .item span{color:var(--muted);font-size:13px}
+  .hint{font-size:13px;color:var(--muted);margin-top:14px}
+  .status{display:flex;align-items:center;gap:10px;margin-top:8px}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
+  .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.bad{background:var(--bad)}
+  .spinner{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--accent);
+       border-radius:50%;animation:spin 1s linear infinite;display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  /* chats */
+  .chat{display:grid;grid-template-columns:300px 1fr;gap:0;height:560px;
+        border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel)}
+  .threads{border-right:1px solid var(--line);overflow-y:auto}
+  .threads .row{display:flex;gap:10px;align-items:center;padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--line)}
+  .threads .row:hover{background:var(--panel2)} .threads .row.active{background:var(--panel2)}
+  .avatar{width:34px;height:34px;border-radius:50%;background:var(--panel2);object-fit:cover;flex:0 0 auto}
+  .row .name{font-weight:600;font-size:14px} .row .sub{color:var(--muted);font-size:12px}
+  .messages{display:flex;flex-direction:column}
+  .msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
+  .bubble{max-width:70%;padding:9px 13px;border-radius:14px;background:var(--panel2);align-self:flex-start;font-size:14px}
+  .bubble.me{align-self:flex-end;background:linear-gradient(90deg,#1c6b68,#188f89);color:#eafffe}
+  .bubble .who{font-size:11px;color:var(--muted);margin-bottom:2px}
+  .bubble.me .who{color:#bdeceb}
+  .msgs .empty{margin:auto;color:var(--muted)}
+  .peer{padding:12px 16px;border-bottom:1px solid var(--line);font-weight:600}
+  .acct{display:flex;align-items:center;gap:12px}
+  .acct .h{font-weight:700}.acct .u{color:var(--muted);font-size:13px}
+  /* health */
+  .metric-hero{display:flex;align-items:baseline;gap:14px}
+  .metric-hero .big{font-size:64px;font-weight:800;line-height:1}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+  .tile{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .tile .k{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  .tile .v{font-size:24px;font-weight:700;margin-top:4px}
+  .bar{height:10px;border-radius:6px;background:var(--panel2);overflow:hidden;margin-top:10px}
+  .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--bad),var(--warn),var(--ok))}
+  code{background:var(--panel2);padding:1px 6px;border-radius:5px;font-size:13px}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><b>Tik</b><i>Tok</i> DM Bridge — <span style="color:var(--muted);font-weight:600">Tester</span></div>
+  <nav class="tabs">
+    <button id="tab-connect" class="active" onclick="show('connect')">Connect</button>
+    <button id="tab-chats" onclick="show('chats')" disabled>Chats</button>
+    <button id="tab-health" onclick="show('health')">Health</button>
+  </nav>
+</header>
+<main>
+  <!-- CONNECT -->
+  <section id="view-connect">
+    <div class="card">
+      <h1>Connect your TikTok account</h1>
+      <p class="lead">The bridge signs you in through TikTok's own login page in a real browser
+        window on this machine, then reads your conversations on the backend.</p>
+      <div id="connect-actions" style="margin-top:16px">
+        <button class="primary" onclick="connect()">Connect TikTok account</button>
+      </div>
+      <div id="connect-status" class="status hidden"></div>
+      <div class="hint" id="connect-hint"></div>
+    </div>
+    <div class="card">
+      <h2>How your data is handled</h2>
+      <p style="margin-top:-4px">Before you log in, here is exactly what happens to your credentials,
+         session and messages. This is enforced in code, not just described.</p>
+      <div class="sec">
+        <div class="item"><b>Your password is never stored</b><span>You type it into TikTok's own
+          page. The bridge never receives or persists it — only the resulting session.</span></div>
+        <div class="item"><b>Session encrypted at rest</b><span>The session is sealed with
+          AES-GCM: a per-user data key, itself wrapped by a master key. The plaintext never
+          touches disk.</span></div>
+        <div class="item"><b>Deleted on logout</b><span>Log out and every trace — session,
+          messages, contacts and the browser profile — is wiped from this machine.</span></div>
+        <div class="item"><b>One stable identity</b><span>Your browser fingerprint is created
+          once and never rotated, and messages download over a scoped, host-allowlisted client.</span></div>
+      </div>
+      <p class="hint">This is a tester for a case study, run locally. Use a throwaway account.</p>
+    </div>
+  </section>
+
+  <!-- CHATS -->
+  <section id="view-chats" class="hidden">
+    <div class="card" style="display:flex;align-items:center;gap:16px">
+      <div class="acct" id="acct"></div>
+      <button class="ghost" style="margin-left:auto" onclick="refreshChats()">Refresh</button>
+      <button class="ghost" onclick="logout()">Log out &amp; wipe</button>
+    </div>
+    <div class="chat">
+      <div class="threads" id="threads"></div>
+      <div class="messages">
+        <div class="peer" id="peer">Select a conversation</div>
+        <div class="msgs" id="msgs"><div class="empty">Your conversations appear here as they sync.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HEALTH -->
+  <section id="view-health" class="hidden">
+    <div class="card">
+      <h2>Production health — the one number</h2>
+      <div class="metric-hero">
+        <div class="big" id="hero">—</div>
+        <div>
+          <div style="font-weight:600">Live-Session-Ratio</div>
+          <div class="hint" style="margin:0">connected &amp; syncing logins ÷ total. Every failure
+            mode collapses into a drop here.</div>
+        </div>
+      </div>
+      <div class="bar"><i id="herobar" style="width:0%"></i></div>
+      <div class="grid">
+        <div class="tile"><div class="k">Password-login share (leading)</div><div class="v" id="m-pw">—</div></div>
+        <div class="tile"><div class="k">Delivery lag p95</div><div class="v" id="m-lag">—</div></div>
+        <div class="tile"><div class="k">Needs-reauth share</div><div class="v" id="m-reauth">—</div></div>
+        <div class="tile"><div class="k">Logins total</div><div class="v" id="m-total">—</div></div>
+        <div class="tile"><div class="k">States</div><div class="v" id="m-states" style="font-size:15px">—</div></div>
+        <div class="tile"><div class="k">Errors by state</div><div class="v" id="m-errors" style="font-size:15px">—</div></div>
+      </div>
+      <p class="hint">Raw Prometheus text at <code>/metrics</code>. Alert on a sudden drop in the
+        headline (signer/browser outage across all users) and on a rising password-login share
+        (sessions dying early — it precedes challenges and bans).</p>
+    </div>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

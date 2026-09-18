@@ -107,3 +107,14 @@ messages carry `f7 = self uid`). `ws_inbound_dm` is now verified live.
   DMs (third-party PII); they stay only in the gitignored capture · a skipUnless test
   (`test_real_captured_dm_frames_if_present`) proves the parser on the real frames
   locally without committing them.
+
+## Demo app — the runnable wrapper (2026-09-18)
+Built a one-command demo per request: `./bridge-app.sh` starts the bridge
+(`bridge/live.py` LiveBridge: a single Playwright worker thread that opens a real
+login browser per user, detects login, encrypts the session, syncs contacts/threads/
+messages, streams DMs over the frontier socket) + `bridge/webapp.py` (JSON API +
+/metrics) + the `wrapper/` tester UI (connect / chats / health, proxying to the
+bridge). Real-TikTok-login only (user's choice). Session envelope-encrypted at rest;
+logout wipes session + pipeline rows + browser profile (`pipeline.wipe_login`). The
+UI shows a data-handling explainer before login. Non-browser plumbing is unit-tested
+(test_webapp); the real login is inherently manual (the demo).

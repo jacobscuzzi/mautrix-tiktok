@@ -165,5 +165,11 @@ class Pipeline:
     def logins(self):
         return [dict(r) for r in self.db.execute("SELECT * FROM logins").fetchall()]
 
+    def wipe_login(self, login_id):
+        """Delete every row for one login -- data deletion on logout."""
+        for tbl in ("events", "threads", "users", "logins"):
+            self.db.execute(f"DELETE FROM {tbl} WHERE login_id=?", (login_id,))
+        self.db.commit()
+
     def close(self):
         self.db.close()
