@@ -33,6 +33,23 @@ context compaction, re-read `docs/BRIEF.md` §0 and this file before doing anyth
   through WebProvider into SQLite; frontier socket opened (1 sync frame, no DM).
   Session imported to encrypted session_store; plaintext storage_state.json shredded.
 
-CURRENT: Tasks A-D + G4 done. Starting Task E (docs distill) + F (iPhone assets).
+- Task F - inject assets (navigator untouched) + needs_user action.
+- Task E - DESIGN.md distilled (path/architecture/login/failure-table/security/
+  metric/ToS+escalation/bridgev2/iPhone/proven-list/Monday-plan), README failure-
+  modes-first, build log updated.
+- G5 - FINISH-HERE.md morning checklist written.
+
+DONE. Definition-of-done (BRIEF §9) all green:
+1. 183 tests pass (1 skipped).  2. manifest + fixtures parse via WebProvider;
+5 required kinds listed (2 real, conv_list empty, 2 gaps).  3. observation doc
+with in-page probe [Obs].  4. ladder+cookies pass fake platform; no real password
+attempt.  5. G4 live sync attempted -> connected, 19 contacts, storage_state
+shredded, recorded w/ timestamps.  6. API+pipeline demo-transcript exists.
+7. DESIGN <=3pp all sections + Monday plan + proven list; README failure-first.
+8. FINISH-HERE morning checklist; DECISIONS+PROGRESS current; CLAUDE.md -> brief.
+9. no secrets in history outside redacted fixtures; no browser-data tracked.
+
+STOP CONDITION: checklist complete. Morning gates (real password login, live DM,
+watched demo, push+tag) are in FINISH-HERE.md - they need Jakob.
 NEXT: Task D (API + pipeline + SQLite + demo, and G4 live read-only import), then
 Task E (docs distill), F (iPhone assets).
