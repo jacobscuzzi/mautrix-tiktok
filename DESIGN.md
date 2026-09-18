@@ -10,6 +10,82 @@ Epistemics: **[Obs]** observed live, **[Inf]** inferred from a credible source,
 
 ---
 
+## 0. How this design was reached — the process and the learning curve
+
+The design was not chosen up front; it was found by hitting walls and pivoting. The
+order matters, because each wall is why a later decision exists.
+
+**Phase 1 — the mobile app API (and three walls).** The first target was TikTok's
+mobile DM API: signed protobuf on `api16-normal-*.tiktokv.com`, the same surface the
+reference reverse-engineering (`molkex/tiktok-private-api`) and Knows' own scripts
+use. It was built end to end — hand-rolled protobuf codec, the IM envelope, a device
+fingerprint, the `Signer` seam wrapping SignerPy, an encrypted session store. Then it
+hit three walls from a datacenter, **all confirmed live**: (1) **IP reputation** —
+even with SignerPy signatures TikTok accepts, `send_email_code`/`account_lookup`
+return `error_code 7` on the first attempt; the signature is fine, the IP is the
+wall. (2) **Device registration** — the mobile IM binds to a device registered
+through a TTEncrypt-encrypted call that no public library has, so `device_register`
+returns `device_id: 0`. (3) **A signer we do not own** — the algorithm rotates and is
+a third-party dependency. Lesson: the mobile path is *correct but not runnable* from
+our backend. It stays in the tree as the documented alternative (§1, §9).
+
+**Phase 2 — the pivot: the page is the signer.** A plain headless Chromium loads
+tiktok.com from the *same* IP, is not blocked, and runs TikTok's own web signer
+(`webmssdk` / `window.byted_acrawler`). The key experiment: an in-page
+`fetch()` with the signing params stripped came back with `X-Bogus`/`X-Gnarly`/
+`msToken` re-appended and HTTP 200 real data. So **the page signs for us** — we never
+reverse the algorithm. This turned the whole problem from "reverse a signer" into
+"drive a browser and tap its traffic," which sidesteps all three Phase-1 walls at
+once. This is the path that ships.
+
+**Phase 3 — build the read path, fixture-first.** From one real logged-in capture we
+learned the DM surface: contacts (`/api/im/spotlight/relation/`), profiles, the
+`im-api` protobuf endpoints, and the `wss://im-ws.tiktok.com/ws/v2` frontier
+websocket (pbbp2). A redactor turned the raw capture (secrets + a friend's real DMs)
+into safe fixtures, and every parser was written against them. The `WebProvider`
+plugs into the same `Syncer`/`normalize`/pipeline the mobile client would have used —
+the provider seam paid off.
+
+**Phase 4 — prove it live (G4).** The captured session was imported read-only and
+pulled **19 real contacts** into SQLite, then a live DM exchange over the frontier
+socket was captured and decoded to text with correct self/peer attribution. Two
+things were learned only from real data: the frontier does **not** replay history on
+connect (the backlog comes from the page's own `get_by_user_init` protobuf), and the
+message field layout (`f6→f500/f203→f5`) — the earlier guess was wrong and only the
+capture fixed it.
+
+**Phase 5 — a runnable demo app.** A `LiveBridge` (one Playwright worker per user) +
+a stdlib HTTP API + a small web wrapper (connect / chats / health). This is where the
+gap between "works in a test" and "works for a person" showed up, and each fix taught
+something:
+
+- **Login throttle** ("maximum attempts"): caused by opening a *new* browser profile
+  per connect — a fresh device identity every time, which TikTok rate-limits and
+  which violates the never-rotate-identity invariant. Fix: one stable profile,
+  reused; log in once, then reuse the session. This is the invariant, made real.
+- **Phantom chats**: the persistent SQLite showed conversations from a previous
+  session/account that no longer existed in the logged-in account. Fix: wipe and
+  re-sync per connect so the shown chats always match the live account.
+- **QR in the UI**: the login browser window was intrusive and, on macOS, the trick
+  to hide it (close + reopen the same profile) raced the profile lock and leaked
+  empty windows, crashing with `NoneType … goto`. Fix: run QR login fully headless
+  and render the QR image *inside* the web UI — no window at all.
+- **Async loading**: the conversation list loads late, so the backlog is reloaded
+  until it appears rather than assumed present on the first paint.
+
+**Phase 6 — sending, investigated and cut.** The one feature that could not be made
+robust. Measured live, a web DM send is a **signed pbbp2 frame over the frontier
+WebSocket**, signed by `webmssdk` in the page — there is no REST endpoint to replay.
+Driving the composer works but is inherently fragile, and it was outside the case
+study's read-focused core. It was removed on purpose; §13 is the honest outlook on
+how to add it later.
+
+The throughline: **de-risk the protocol in the cheapest place (Python + a browser),
+let TikTok's own code do the signing, prove each claim against a real capture, and be
+honest about the one wall (sending) that a browser cannot cross.**
+
+---
+
 ## 1. Path selection — the web path ships, the mobile path is documented
 
 Two DM surfaces exist; we probed both live.
@@ -269,3 +345,70 @@ egress stays a documented lever, not a build target.
    account's TTP cluster, and the cross-user 4xx canary alert on the metric.
 5. **Port to a bridgev2 Go connector** (mapping in §9), reusing this Python as the
    protocol reference. *(Go port last: the risky protocol work is already de-risked.)*
+
+---
+
+## 13. Sending messages — the obstacle, and how to add it in the future
+
+Sending is the one capability this prototype does not ship, and the reason is
+specific, not a matter of effort or language.
+
+**The obstacle (measured live).** A web DM is **not** sent over a REST endpoint that
+could be signed and replayed. It goes out as a **length-delimited protobuf ("pbbp2")
+frame over the frontier WebSocket** (`wss://im-ws.tiktok.com/ws/v2`), and that frame
+is signed by TikTok's own `webmssdk` in the page (`frontierSign` / `registerWsSigner`,
+the same SDK that mints the socket's `access_key`). Confirmed: when the composer
+sends, the outbound WS frame carries the message text and is already signed; no
+`/v1/message/send` HTTP call is made. So there is nothing to "replay" — to send off
+our own code we would have to reproduce `frontierSign`, which is exactly the signer we
+chose never to reverse. **This is a signing wall, not a language or framework wall:
+Go, or a Go bridgev2 connector, does not change it.**
+
+**Five ways to add sending later, cheapest/most-fragile first:**
+
+1. **Browser-in-the-loop, hardened (fastest, medium reliability).** Keep driving
+   TikTok's own composer (the page signs), but make it reliable: pre-open the target
+   conversation in the background page when the user selects it (so opening is not
+   done at send time), a per-conversation send queue (one action at a time — a real
+   person has one device), and confirm delivery by the message returning over the
+   frontier (never blind-replay; reconcile on the next read). This is a real product
+   path — it is how a "foreground, live while the app is open" iOS `WKWebView` mode
+   would send too (§10). Cost: a browser context per active sender.
+
+2. **A signing-oracle service (the scalable version of #1).** Run *one* headful
+   browser that exposes TikTok's own signer as an endpoint —
+   `expose_binding("__sign", (parts) => window.byted_acrawler.frontierSign(parts))`.
+   Lightweight per-user clients build the send frame, call the oracle to sign it, and
+   push it over their own websocket. This decouples signing from a browser-per-user
+   and is the same shape as the escalation ladder in §8 (shared signing browser +
+   thin clients). It needs the exact frame layout, which a capture of one real send
+   gives (we already decode the receive side).
+
+3. **A ported/maintained web signer (the robust, whatsmeow-style path).** Reproduce
+   `frontierSign` off-browser — reverse `webmssdk` or transpile it — so the send frame
+   is signed with no browser at all. This is exactly the role `whatsmeow` plays for
+   mautrix-whatsapp and `eulerstream` plays for TikTok **LIVE**: a maintained library
+   that owns the signing. It is the most work and the most durable; it is also the
+   thing whose absence is *the* reason sending is hard. A bridgev2 Go connector would
+   depend on this, not replace it.
+
+4. **The mobile send path, if the gates open.** `/v1/message/send` with the mobile
+   `x-argus`/`x-gorgon` signer (SignerPy) already has a confirmed envelope
+   (`bridge/im.py`). It is blocked today by IP reputation and device registration
+   (TTEncrypt, §0 Phase 1). With a clean per-user residential IP *and* a way to
+   register a device, this becomes viable — independent of the web signer.
+
+5. **A vendor send endpoint (buy, not build).** TikAPI exposes
+   `POST /user/message/send`; the `TikApiProvider` seam already implements it. This
+   trades the signing problem for a paid dependency, polling-only inbound, and an
+   explicit ToS decision (§ the TikAPI evaluation note) — acceptable as a fallback,
+   not as the default.
+
+**Recommended sequence.** Start with #1 for a working-but-supervised send in the
+demo/product, move to #2 (signing oracle) to scale it, and treat #3 (a maintained web
+signer) as the real long-term investment — the same investment every serious bridge
+(WhatsApp, LINE, Instagram) made for its platform. In every case the invariants hold:
+one stable identity, one action per user at a time, and **never blind-replay an
+ambiguous send** — mark it pending and reconcile against the next history fetch, which
+is why `get_by_conversation` (already built for "load older") is also the delivery
+check.
