@@ -160,3 +160,17 @@ f3 has_more). `LiveBridge.load_older` (via a worker `submit`) ingests + dedups a
 advances the per-conversation cursor. API `POST /api/load_older`; the wrapper adds a
 "Load older" button that keeps scroll position. Verified live: 5 -> 21 messages in one
 call, has_more=0. conversation_short_id comes from message field 5.
+
+## Login throttle fix: one stable profile, reuse the session (2026-09-18)
+Reported: "Maximum number of attempts reached" on the login. Cause was ours: connect()
+made a NEW random browser profile each time, so every test was a fresh device identity
+doing a fresh login -- exactly what TikTok rate-limits, and a violation of the design's
+"one stable identity, never rotated" rule. Fix: connect() reuses ONE stable profile
+(`<data_dir>/session`); _do_open first opens it HEADLESS and, if a live session exists,
+goes straight to connected with no login window and no new login. A visible login
+window opens only when there is genuinely no session. Verified live: reconnecting to an
+existing session reaches connected with headful_login=False (no window). Also: the
+login page's "maximum number of attempts / try again later" is detected and surfaced as
+a clear needs_user message. Note: the TikTok cooldown that is already tripped must
+expire on its own (~15-60 min); the fix prevents it recurring. "Log out & wipe" still
+deletes the profile (forcing a fresh login next time), so avoid it mid-testing.

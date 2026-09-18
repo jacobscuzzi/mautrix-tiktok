@@ -108,10 +108,18 @@ class LiveBridge:
             self._thread.start()
 
     def connect(self):
-        login_id = uuid.uuid4().hex[:12]
-        profile = os.path.join(self.data_dir, login_id, "profile")
-        os.makedirs(profile, exist_ok=True)
-        login = LiveLogin(login_id, os.path.join(self.data_dir, login_id))
+        # One STABLE profile for the demo, reused across connects and app restarts.
+        # This is the design invariant (one device identity per user, never rotated)
+        # and it stops TikTok's login throttle: an existing session is reused with
+        # no new login, so we do not log in from a fresh fingerprint every time.
+        login_id = "session"
+        with self._lock:
+            existing = self.logins.get(login_id)
+            if existing and existing.state in (OPENING, WAITING_LOGIN, CONNECTING, CONNECTED):
+                return login_id
+        profile_root = os.path.join(self.data_dir, "session")
+        os.makedirs(os.path.join(profile_root, "profile"), exist_ok=True)
+        login = LiveLogin(login_id, profile_root)
         with self._lock:
             self.logins[login_id] = login
         self.pipeline.upsert_login(login_id, source="web", state=OPENING,
@@ -205,7 +213,27 @@ class LiveBridge:
         if not login:
             return
         try:
-            self._open_context(login, headless=self.headless)
+            # 1) reuse an existing alive session HEADLESS first (no visible window,
+            #    no new login) -- this is the common path after the first login.
+            self._open_context(login, headless=True)
+            login.headful_login = False
+            login.page.goto(MESSAGES_URL, wait_until="domcontentloaded", timeout=45000)
+            login.page.wait_for_timeout(2500)
+            cookies = {c["name"]: c["value"] for c in login.ctx.cookies()}
+            if cookies.get("sessionid") and "/login" not in login.page.url:
+                self._set_state(login, CONNECTING)
+                self._establish(login, cookies)     # connected, no window shown
+                return
+            # 2) no live session -> open a real login window (headful) once.
+            login.ctx.close()
+            login.ctx = None
+            login.page = None
+            for _ in range(20):
+                try:
+                    self._open_context(login, headless=self.headless)
+                    break
+                except Exception:
+                    time.sleep(0.5)
             login.headful_login = not self.headless
             login.page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=45000)
             self._set_state(login, WAITING_LOGIN)
@@ -286,12 +314,26 @@ class LiveBridge:
             return
         cookies = {c["name"]: c["value"] for c in login.ctx.cookies()}
         if not cookies.get("sessionid"):
+            if self._login_blocked(login.page):
+                self._fail(login, NEEDS_USER, RuntimeError(
+                    "TikTok is rate-limiting logins (max attempts). Wait ~15-60 min, "
+                    "then reconnect -- the saved session is reused with no new login."))
+                return
             login.page.wait_for_timeout(300)   # pump events
             return
         # logged in -> hand off to a background headless context, then connect
         self._set_state(login, CONNECTING)
         self._go_background(login)
         self._establish(login, cookies)
+
+    @staticmethod
+    def _login_blocked(page):
+        try:
+            return bool(page.evaluate(
+                "() => /maximum number of attempts|too many attempts|try again later/i"
+                ".test((document.body && document.body.innerText) || '')"))
+        except Exception:
+            return False
 
     def _establish(self, login, cookies):
         page = login.page
