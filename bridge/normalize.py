@@ -108,14 +108,79 @@ def to_thread(d, is_stranger=False):
     )
 
 
+_IMG_EXT = (".gif", ".webp", ".png", ".jpg", ".jpeg")
+
+
+def _find_url(obj, depth=0):
+    """First http(s) media URL anywhere in a content object (url_list, nested)."""
+    if depth > 6:
+        return None
+    if isinstance(obj, str):
+        return obj if obj.startswith("http") else None
+    if isinstance(obj, dict):
+        # prefer an explicit media list
+        for k in ("url_list", "urls", "image_url", "gif_url", "url", "static_url",
+                  "animated_url", "thumbnail"):
+            v = obj.get(k)
+            u = _find_url(v, depth + 1)
+            if u:
+                return u
+        # scan the rest, but never treat message text as a media URL
+        for k, v in obj.items():
+            if k in ("text", "content", "desc", "description"):
+                continue
+            u = _find_url(v, depth + 1)
+            if u:
+                return u
+    if isinstance(obj, list):
+        for v in obj:
+            u = _find_url(v, depth + 1)
+            if u:
+                return u
+    return None
+
+
+def _media_of(content):
+    """Return (kind, url) for an image/gif/sticker message, else (None, None).
+
+    Generic on purpose: any media URL in the content is rendered, so GIFs, images
+    and stickers all work without hard-coding one TikTok wrapper shape.
+    """
+    if isinstance(content, str):
+        s = content.strip()
+        if not s.startswith("{"):
+            return None, None
+        try:
+            content = json.loads(s)
+        except ValueError:
+            return None, None
+    if not isinstance(content, dict):
+        return None, None
+    url = _find_url(content)
+    if not url:
+        return None, None
+    low = url.lower()
+    if ".gif" in low or content.get("aweType") in (701, 702, 703):
+        return "gif", url
+    if any(k in content for k in ("sticker", "sticker_url", "sticker_id")):
+        return "sticker", url
+    return "image", url
+
+
 def to_event(d):
-    text = extract_text(d.get("content") if d.get("content") is not None else d.get("text"))
+    raw = d.get("content") if d.get("content") is not None else d.get("text")
+    text = extract_text(raw)
+    media_kind, media_url = _media_of(raw)
+    if media_url:
+        kind, body = media_kind, media_url
+    else:
+        kind, body = _kind_of(d, text), text
     return Event(
         message_id=str(d.get("server_message_id") or d.get("message_id") or ""),
         conversation_id=str(d.get("conversation_id") or ""),
         sender_id=str(d.get("sender") or d.get("sender_id") or ""),
-        text=text,
+        text=body,
         timestamp_ms=int(d.get("create_time") or d.get("timestamp_ms") or 0),
-        kind=_kind_of(d, text),
+        kind=kind,
         raw_ref=d.get("raw_ref"),
     )

@@ -118,3 +118,16 @@ bridge). Real-TikTok-login only (user's choice). Session envelope-encrypted at r
 logout wipes session + pipeline rows + browser profile (`pipeline.wipe_login`). The
 UI shows a data-handling explainer before login. Non-browser plumbing is unit-tested
 (test_webapp); the real login is inherently manual (the demo).
+
+## Demo UX: background session + media rendering (2026-09-18)
+- After a successful login the visible browser window is closed and the SAME
+  persistent profile is reopened HEADLESS in the background (`LiveBridge._go_background`),
+  so the bridge keeps syncing with no window on screen. The session is saved before
+  the swap; the profile lock releases immediately in practice (retry loop as a guard).
+  Login uses the headful window; all ongoing work is headless.
+- GIFs/images/stickers: `normalize._media_of` extracts any media URL from a message's
+  content JSON generically (no GIF sample was in the capture), sets kind=gif/image/
+  sticker with the URL as the body; the wrapper renders it as an <img> (GIFs animate).
+  A message whose text merely contains a URL stays text. If TikTok wraps a GIF in an
+  unexpected shape, the generic URL search still catches it; a bad URL falls back to
+  a "[gif]" label via onerror.

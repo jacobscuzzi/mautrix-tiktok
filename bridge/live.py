@@ -55,6 +55,7 @@ class LiveLogin:
         self.connected_at = None
         self.last_sync_ms = 0
         self.authenticated = False
+        self.headful_login = False
         # worker-thread-only:
         self.ctx = None
         self.page = None
@@ -173,15 +174,42 @@ class LiveBridge:
         if not login:
             return
         try:
-            ctx, _ = browserfac.launch_persistent(
-                self._p, login.profile_dir, headless=self.headless, channel="chromium")
-            login.ctx = ctx
-            login.page = ctx.pages[0] if ctx.pages else ctx.new_page()
-            login.page.on("websocket", lambda ws: self._attach_ws(login, ws))
+            self._open_context(login, headless=self.headless)
+            login.headful_login = not self.headless
             login.page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=45000)
             self._set_state(login, WAITING_LOGIN)
         except Exception as e:
             self._fail(login, ERROR, e)
+
+    def _open_context(self, login, headless):
+        ctx, _ = browserfac.launch_persistent(
+            self._p, login.profile_dir, headless=headless, channel="chromium")
+        login.ctx = ctx
+        login.page = ctx.pages[0] if ctx.pages else ctx.new_page()
+        login.page.on("websocket", lambda ws: self._attach_ws(login, ws))
+
+    def _go_background(self, login):
+        """After login, close the visible window and reopen the SAME profile
+        headless so the session keeps syncing in the background."""
+        if not getattr(login, "headful_login", False):
+            return  # login was already headless: nothing visible to close
+        try:
+            self._save_session(login)          # persist before closing the window
+            login.ctx.close()
+        except Exception:
+            pass
+        login.ctx = None
+        login.page = None
+        # relaunch headless on the same profile (retry until the profile lock frees)
+        last = None
+        for _ in range(20):
+            try:
+                self._open_context(login, headless=True)
+                return
+            except Exception as e:
+                last = e
+                time.sleep(0.5)
+        raise last or RuntimeError("could not reopen background browser")
 
     def _attach_ws(self, login, ws):
         if "im-ws.tiktok.com" in ws.url and login.provider:
@@ -209,8 +237,9 @@ class LiveBridge:
         if not cookies.get("sessionid"):
             login.page.wait_for_timeout(300)   # pump events
             return
-        # logged in -> connect
+        # logged in -> hand off to a background headless context, then connect
         self._set_state(login, CONNECTING)
+        self._go_background(login)
         self._establish(login, cookies)
 
     def _establish(self, login, cookies):

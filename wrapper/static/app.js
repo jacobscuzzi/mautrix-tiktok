@@ -123,10 +123,18 @@ async function loadMessages(tid) {
     $("msgs").innerHTML = `<div class="empty">No messages synced yet in this conversation.</div>`;
     return;
   }
+  const MEDIA = ["gif", "image", "sticker"];
   $("msgs").innerHTML = msgs.map((m) => {
     const me = m.sender_id === SELF_UID;
-    const text = m.content || (m.kind !== "text" ? "[" + m.kind + "]" : "");
-    return `<div class="bubble ${me ? "me" : ""}">${!me ? `<div class="who">${m.sender_id.slice(-6)}</div>` : ""}${escapeHtml(text)}</div>`;
+    const who = !me ? `<div class="who">${m.sender_id.slice(-6)}</div>` : "";
+    let inner;
+    if (MEDIA.includes(m.kind) && /^https?:\/\//.test(m.content || "")) {
+      inner = `<img class="dm-media" src="${m.content}" alt="${m.kind}" loading="lazy"
+                onerror="this.replaceWith(document.createTextNode('[${m.kind}]'))">`;
+    } else {
+      inner = escapeHtml(m.content || (m.kind !== "text" ? "[" + m.kind + "]" : ""));
+    }
+    return `<div class="bubble ${me ? "me" : ""}">${who}${inner}</div>`;
   }).join("");
   const box = $("msgs"); box.scrollTop = box.scrollHeight;
 }
