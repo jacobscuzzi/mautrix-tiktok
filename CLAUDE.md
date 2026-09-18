@@ -40,10 +40,15 @@ Building the WebProvider path fixture-first from one real logged-in capture unde
 
 ## Layout
 
-`bridge/` — proto codec, envelope, errors, device, signing (mobile), client, session
-store (AES-GCM), state, normalize, sync, im, passport, metrics, app, config, proxy,
-provider seam (`provider.py`, `providers/tikapi.py`); `bridge/web/` — web session /
-page client / frontier decode (Task B); `bridge/auth/` — login state machine, web
-password login + cookies import (Task C); `bridge/cmd/` — CLIs incl. capture.
-`scripts/` — redact-capture, decode-frontier, export-session, demo. `tests/` —
-unittest + `tests/fixtures/web/`. `docs/` — BRIEF, DESIGN, notes, observations.
+One `MessageProvider` seam (`bridge/provider.py`) makes three backends
+interchangeable: the shipped **web** path (`providers/web.py`, `bridge/web/`, driven
+live by `bridge/live.py` + `bridge/webapp.py`), the documented **mobile** signed
+client (`im.py`, `client.py`, `signing.py`, `device.py`, `passport.py`, …), and the
+**TikAPI** vendor adapter (`providers/tikapi.py`). Shared pipeline below the seam:
+`sync.py`, `state.py`, `normalize.py`, `pipeline.py` (SQLite), `session_store.py`
+(AES-GCM), `metrics.py`, `proto.py`. `bridge/auth/` — login state machine, web
+password ladder, cookies import, stealth browser. `bridge/cmd/` — `serve` (demo
+launcher), `capture`, `demo`, `run`. `wrapper/` — the tester UI + proxy. `scripts/`
+— redact-capture, decode-frontier, export-session, g4_live_sync, demo.sh. `tests/`
+— unittest + `fixtures/web/` + `fake_platform.py`. `docs/` — DESIGN, BRIEF, notes,
+observations, DECISIONS, PROGRESS.

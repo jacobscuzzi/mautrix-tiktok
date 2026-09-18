@@ -112,15 +112,35 @@ Fake-platform only: the full password ladder. Not built: live web conv-list JSON
 
 ## Layout
 
+One `MessageProvider` seam (`bridge/provider.py`) lets three backends be
+interchangeable. **The web browser path ships**; the mobile signed-API client and
+the TikAPI vendor adapter are the documented build-vs-buy alternatives (kept behind
+the seam and unit-tested, see `DESIGN.md` §1). The pipeline below the seam — sync,
+normalize, SQLite store, metrics — is shared by all three.
+
 ```
-bridge/web/         session, page client (in-page signed fetch), frontier decode, inject assets
-bridge/providers/   web.py (WebProvider), tikapi.py; provider.py = the MessageProvider seam
-bridge/auth/        login state machine, web_password_login (ladder), web_cookie_import, browser
-bridge/             proto, normalize, sync, state, session_store, pipeline (SQLite), api, app, metrics
-bridge/             live.py (browser worker per user), webapp.py (bridge HTTP API + /metrics)
-bridge/cmd/         serve (the demo launcher), capture, demo, run, login
-wrapper/            the tester UI (static/) + proxy server; talks to the bridge API
-scripts/            redact-capture, decode-frontier, export-session, demo.sh, g4_live_sync
-tests/              unittest + fixtures/web/ + fake_platform.py
-docs/               BRIEF, DESIGN, observations/, notes/, DECISIONS, PROGRESS, demo-transcript
+bridge/
+  live.py            the running bridge: one browser worker per user (login,
+                     sync, realtime, send, history) — drives the demo app
+  webapp.py          bridge HTTP API (JSON + /metrics), backed by live.py
+  pipeline.py        SQLite raw layer (logins/users/threads/events), idempotent
+  sync.py state.py   backfill + poll with dedup; cursors + watermarks
+  normalize.py       TikTok objects -> canonical User/Thread/Event
+  metrics.py         Live-Session-Ratio + leading indicators (Prometheus)
+  session_store.py   AES-GCM envelope-encrypted session at rest
+  proto.py           hand-rolled protobuf codec (encode/decode tree)
+  provider.py        the MessageProvider seam (web | mobile | tikapi)
+  web/               session, page client (in-page signed fetch), frontier
+                     (pbbp2) decode, WKWebView inject assets
+  providers/         web.py (shipped), tikapi.py (vendor alternative)
+  auth/              login state machine, web_password_login (ladder),
+                     web_cookie_import, browser (stealth factory)
+  im.py client.py    the mobile signed-protobuf client (documented alternative)
+  signing.py device.py passport.py envelope.py proxy.py config.py
+  cmd/               serve (demo launcher), capture, demo, run
+wrapper/             the tester UI: static/ (connect / chats / health) + a proxy
+                     server; a client of the bridge API
+scripts/             redact-capture, decode-frontier, export-session, g4_live_sync, demo.sh
+tests/               unittest + fixtures/web/ + fake_platform.py
+docs/                DESIGN, BRIEF, observations/, notes/, DECISIONS, PROGRESS
 ```

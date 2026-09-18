@@ -177,7 +177,6 @@ class TestConversationHistory(unittest.TestCase):
         for conv, mid, ts_us, sender, content in messages:
             block += proto.encode_fields({1: proto.encode_fields(
                 {1: conv.encode(), 3: mid, 4: ts_us, 5: 555, 7: sender, 8: content.encode()})})
-        inner = proto.encode_fields({1: bytes(block)})  # placeholder, rebuilt below
         # f301 block: f1[] messages + f2 next_cursor + f3 has_more
         blk = bytearray(block)
         blk += proto.encode_fields({2: next_cursor, 3: int(has_more)})

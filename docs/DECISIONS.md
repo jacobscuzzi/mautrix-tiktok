@@ -200,3 +200,14 @@ to the send WITHOUT sending (typed a draft into the editor, read it back, cleare
 the first real send is left to the user (outward-facing: it DMs a real contact). Risk
 noted: automated sending is a stronger bot/ban signal than reading, so keep it gentle
 and per the user's explicit request.
+
+## Codebase cleanup for review (2026-09-18)
+Dead-code/file audit (pyflakes + import/reference scan). Removed superseded files:
+`bridge/auth/web_qr_login.py` and `web_dm_capture.py` (replaced by `bridge/cmd/capture.py`
++ `bridge/live.py`), `run-web-login.sh` (replaced by `bridge-app.sh` / `run-web-capture.sh`),
+`DESIGN-BROWSER.md` (folded into DESIGN.md §1), and `beeper-extraction.md` (a duplicate of
+`docs/notes/learning-from-beeper.md`). Removed dead imports (uuid, base64, unused ladder
+constants, test locals). Kept the mobile-IM and TikAPI providers on purpose: they are the
+documented build-vs-buy alternatives behind the MessageProvider seam and are unit-tested.
+README/CLAUDE layout rewritten to state clearly what ships (web) vs the documented
+alternatives. pyflakes clean; 198 tests still green.

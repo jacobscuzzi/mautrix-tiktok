@@ -25,7 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 from . import errors
-from .auth.web_password_login import Ladder, NEEDS_USER, CONNECTED, BAD_CREDENTIALS, BLOCKED
+from .auth.web_password_login import Ladder, NEEDS_USER, CONNECTED
 
 
 class LoginManager:

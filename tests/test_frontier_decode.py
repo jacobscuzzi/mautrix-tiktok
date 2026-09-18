@@ -22,11 +22,6 @@ decoder = _load("decode_frontier", "scripts/decode-frontier.py")
 def _make_frame(service, method, headers, payload, gzip_it):
     enc = "gzip" if gzip_it else ""
     body = gzip.compress(payload) if gzip_it else payload
-    fields = {1: 5, 3: service, 4: method, 6: enc.encode(), 8: body}
-    hdr_msgs = b"".join(
-        proto.encode_fields({(3 << 3): 0})[:0] +  # noop to keep bytes type
-        proto.encode_fields({1: k.encode(), 2: v.encode()}) for k, v in headers.items())
-    # append header field 5 entries
     raw = bytearray(proto.encode_fields({1: 5, 3: service, 4: method}))
     for k, v in headers.items():
         h = proto.encode_fields({1: k.encode(), 2: v.encode()})

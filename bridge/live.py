@@ -18,7 +18,6 @@ import queue
 import shutil
 import threading
 import time
-import uuid
 
 from . import errors, normalize
 from .auth import browser as browserfac
