@@ -10,12 +10,48 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
+import subprocess
 import threading
 import time
-import webbrowser
 
 from ..live import LiveBridge
 from ..webapp import make_bridge_server
+
+
+def _is_wsl():
+    try:
+        return "microsoft" in open("/proc/version").read().lower()
+    except Exception:
+        return False
+
+
+def open_url(url):
+    """Open a browser reliably, including under WSL (where `gio open` fails)."""
+    candidates = []
+    if _is_wsl():
+        candidates = [["wslview", url],
+                      ["/mnt/c/Windows/explorer.exe", url],
+                      ["explorer.exe", url],
+                      ["powershell.exe", "-NoProfile", "Start-Process", url],
+                      ["/mnt/c/Windows/System32/cmd.exe", "/c", "start", "", url]]
+    else:
+        candidates = [["xdg-open", url], ["open", url]]
+    for cmd in candidates:
+        exe = cmd[0] if os.path.isabs(cmd[0]) else shutil.which(cmd[0])
+        if not exe or (os.path.isabs(cmd[0]) and not os.path.exists(cmd[0])):
+            continue
+        try:
+            subprocess.Popen([exe] + cmd[1:], stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+            return True
+        except Exception:
+            continue
+    try:
+        import webbrowser
+        return webbrowser.open(url)
+    except Exception:
+        return False
 
 
 def main(argv=None):
@@ -52,10 +88,10 @@ def main(argv=None):
           f"  data dir   : {a.data_dir}  (sessions encrypted at rest; wiped on logout)\n"
           f"  Ctrl-C to stop.\n")
     if not a.no_open:
-        try:
-            webbrowser.open(url)
-        except Exception:
-            pass
+        if open_url(url):
+            print("  opening your browser…\n")
+        else:
+            print(f"  couldn't auto-open a browser — open {url} yourself.\n")
     try:
         while True:
             time.sleep(1)
