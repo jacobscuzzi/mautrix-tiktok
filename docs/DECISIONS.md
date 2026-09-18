@@ -66,3 +66,28 @@ pure state-machine unit tests. The real attempt is a morning gate in FINISH-HERE
 - 2026-09-18 · Quote attribute values in the pinned CSS selectors
   (`[data-e2e="2fa-input"]`) · Chromium rejects unquoted attribute values that
   start with a digit · none.
+
+## G4 result — LIVE, read-only (2026-09-18 08:23–08:24 CEST)
+Ran `scripts/g4_live_sync.py` against the real account with the captured persistent
+profile (channel chromium, headless). **Outcome: connected.**
+- Landed on `/messages` with no `/login` redirect; `is_alive()` via the signed
+  in-page `/passport/token/beat/web/` call returned true. The session captured at
+  06:55 was still alive ~90 min later.
+- **19 contacts pulled live** from `/api/im/spotlight/relation/` through the real
+  WebProvider (in-page signed fetch) into a scratch SQLite pipeline. This is the
+  read path proven end to end against a live session, not fixtures.
+- Frontier socket opened; 1 inbound frame (sync/cursor, no DM — inbox empty, no
+  friend DM overnight as noted in capture-notes). Delivery lag: n/a (no message).
+- Read-only honored: no sends, no mark-read (allow-send: no). Gentle: one pass +
+  ~45 s socket hold, not a night-long browser hold (lower anomaly risk).
+- After the verified import into `session_store` (encrypted blob
+  `browser-data/jakob/<uid>.session`, loads back and matches), the plaintext
+  `browser-data/jakob/storage_state.json` was **shredded** (`shred -u`). The
+  encrypted blob is now the only at-rest copy; the persistent `profile/` (untouched)
+  remains the working credential on the laptop. Dev master key persisted locally at
+  `browser-data/jakob/master.key` as a KMS stand-in (prod: BRIDGE_MASTER_KEY/KMS).
+
+- 2026-09-18 · Store the dev master key next to the encrypted blob under the
+  gitignored browser-data/ · overnight has no KMS/BRIDGE_MASTER_KEY and the
+  plaintext alternative is worse; encryption-at-rest against disk theft is weaker
+  this way but honest · production reads the key from env/KMS (seam already exists).
