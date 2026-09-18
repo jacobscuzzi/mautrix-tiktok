@@ -174,3 +174,14 @@ login page's "maximum number of attempts / try again later" is detected and surf
 a clear needs_user message. Note: the TikTok cooldown that is already tripped must
 expire on its own (~15-60 min); the fix prevents it recurring. "Log out & wipe" still
 deletes the profile (forcing a fresh login next time), so avoid it mid-testing.
+
+## QR login as an alternative (2026-09-18)
+Added a passwordless QR option for users who don't know their password/email. QR is
+the design's primary/safest path (phone approves, no credentials, no captcha, no
+password throttle), and login detection is method-agnostic (it waits for the sessionid
+cookie), so it was nearly free: connect(flow="qr") opens the login window at
+/login/qrcode instead of the email form; the user scans with the TikTok app and the
+session is captured the same way. flow is threaded through connect() and the API;
+password_login_used is False for QR (more accurate leading indicator). UI: two buttons
+("Scan a QR code" / "Use password / email"). Verified live: the QR page opens with a
+real QR rendered.

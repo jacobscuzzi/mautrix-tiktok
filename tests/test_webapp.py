@@ -35,7 +35,8 @@ class StubLive:
     def logins(self):
         return self._logins
 
-    def connect(self):
+    def connect(self, flow="password"):
+        self.last_flow = flow
         lid = "live%d" % (len(self._logins) + 1)
         self._logins[lid] = self._L(lid, "connected")
         self.pipeline.upsert_login(lid, state="connected", password_login_used=True)
@@ -133,6 +134,12 @@ class TestWebapp(unittest.TestCase):
         self.assertIn("live_session_ratio", h)
         code, body = self._get("/metrics")
         self.assertIn(b"bridge_live_session_ratio", body)
+
+    def test_connect_passes_flow(self):
+        self._post("/api/connect", {"flow": "qr"})
+        self.assertEqual(self.live.last_flow, "qr")
+        self._post("/api/connect", {"flow": "bogus"})
+        self.assertEqual(self.live.last_flow, "password")   # invalid -> password
 
     def test_load_older_endpoint(self):
         _, res = self._post("/api/connect")

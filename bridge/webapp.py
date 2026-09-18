@@ -78,7 +78,9 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         u = urlparse(self.path)
         if u.path == "/api/connect":
-            return self._json(200, {"login_id": self.live.connect()})
+            flow = (self._body().get("flow") or "password")
+            flow = flow if flow in ("password", "qr") else "password"
+            return self._json(200, {"login_id": self.live.connect(flow)})
         if u.path == "/api/logout":
             self.live.logout(self._body().get("login_id", ""))
             return self._json(200, {"ok": True})

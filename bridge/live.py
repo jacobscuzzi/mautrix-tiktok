@@ -32,6 +32,7 @@ from .web import session as websess
 from .web.page import PageClient, playwright_evaluator
 
 LOGIN_URL = "https://www.tiktok.com/login/phone-or-email/email"
+QR_URL = "https://www.tiktok.com/login/qrcode"
 MESSAGES_URL = "https://www.tiktok.com/messages"
 
 # state machine for one login
@@ -45,13 +46,14 @@ LOGGED_OUT = "logged_out"
 
 
 class LiveLogin:
-    def __init__(self, login_id, profile_dir):
+    def __init__(self, login_id, profile_dir, flow="password"):
         self.login_id = login_id
         self.profile_dir = profile_dir
+        self.flow = flow               # "password" (email/username) or "qr"
         self.state = OPENING
         self.account = None            # {handle, uid, nickname, avatar}
         self.last_error = None
-        self.password_login_used = True   # real interactive login
+        self.password_login_used = (flow == "password")
         self.connected_at = None
         self.last_sync_ms = 0
         self.authenticated = False
@@ -107,11 +109,13 @@ class LiveBridge:
             self._started = True
             self._thread.start()
 
-    def connect(self):
+    def connect(self, flow="password"):
         # One STABLE profile for the demo, reused across connects and app restarts.
         # This is the design invariant (one device identity per user, never rotated)
         # and it stops TikTok's login throttle: an existing session is reused with
         # no new login, so we do not log in from a fresh fingerprint every time.
+        # flow: "password" (email/username form) or "qr" (scan with the app,
+        # passwordless -- the safest path, for users who don't know their password).
         login_id = "session"
         with self._lock:
             existing = self.logins.get(login_id)
@@ -119,7 +123,7 @@ class LiveBridge:
                 return login_id
         profile_root = os.path.join(self.data_dir, "session")
         os.makedirs(os.path.join(profile_root, "profile"), exist_ok=True)
-        login = LiveLogin(login_id, profile_root)
+        login = LiveLogin(login_id, profile_root, flow=flow)
         with self._lock:
             self.logins[login_id] = login
         self.pipeline.upsert_login(login_id, source="web", state=OPENING,
@@ -235,7 +239,8 @@ class LiveBridge:
                 except Exception:
                     time.sleep(0.5)
             login.headful_login = not self.headless
-            login.page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=45000)
+            start_url = QR_URL if login.flow == "qr" else LOGIN_URL
+            login.page.goto(start_url, wait_until="domcontentloaded", timeout=45000)
             self._set_state(login, WAITING_LOGIN)
         except Exception as e:
             self._fail(login, ERROR, e)

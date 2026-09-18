@@ -93,9 +93,13 @@
       <h1>Connect your TikTok account</h1>
       <p class="lead">The bridge signs you in through TikTok's own login page in a real browser
         window on this machine, then reads your conversations on the backend.</p>
-      <div id="connect-actions" style="margin-top:16px">
-        <button class="primary" onclick="connect()">Connect TikTok account</button>
+      <div id="connect-actions" style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap">
+        <button class="primary" onclick="connect('qr')">Scan a QR code</button>
+        <button class="ghost" onclick="connect('password')">Use password / email</button>
       </div>
+      <p class="hint" style="margin-top:10px">Don't know your password or email? <b>Scan a QR code</b>
+        — open TikTok on your phone, go to Profile → menu → Scan, and approve. It is passwordless
+        and the safest option.</p>
       <div id="connect-status" class="status hidden"></div>
       <div class="hint" id="connect-hint"></div>
     </div>

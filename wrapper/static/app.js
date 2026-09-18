@@ -27,14 +27,18 @@ const LABELS = {
 };
 const DOT = { connected: "ok", needs_user: "warn", error: "bad" };
 
-async function connect() {
+async function connect(flow) {
   $("connect-actions").classList.add("hidden");
   $("connect-status").classList.remove("hidden");
   setStatus("opening_browser");
-  const res = await api("/api/connect", { method: "POST" });
+  const res = await api("/api/connect", { method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ flow: flow || "password" }) });
   LOGIN_ID = res.login_id;
+  CONNECT_FLOW = flow || "password";
   POLL = setInterval(pollStatus, 1200);
 }
+let CONNECT_FLOW = "password";
 
 function setStatus(state, err) {
   const dot = DOT[state] || "";
@@ -45,7 +49,9 @@ function setStatus(state, err) {
     `<span>${LABELS[state] || state}</span>`;
   $("connect-hint").textContent =
     state === "waiting_login"
-      ? "A real Chrome window opened on this machine. Your password goes only into TikTok's page."
+      ? (CONNECT_FLOW === "qr"
+          ? "A window opened with a QR code. Open TikTok on your phone → Profile → menu → Scan, and approve."
+          : "A real Chrome window opened on this machine. Your password goes only into TikTok's page.")
       : err || "";
 }
 
