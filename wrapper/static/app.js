@@ -77,6 +77,14 @@ async function pollStatus() {
   let st;
   try { st = await api("/api/status?login_id=" + LOGIN_ID); } catch (e) { return; }
   setStatus(st.state, st.last_error);
+  // QR flow: show the code inside this page (no browser window to deal with)
+  const qrBox = $("qr-box");
+  if (st.state === "waiting_login" && CONNECT_FLOW === "qr" && st.qr) {
+    $("qr-img").src = "data:image/png;base64," + st.qr;
+    qrBox.classList.remove("hidden");
+  } else {
+    qrBox.classList.add("hidden");
+  }
   if (st.state === "connected") {
     clearInterval(POLL); POLL = null;
     SELF_UID = st.account && st.account.uid;

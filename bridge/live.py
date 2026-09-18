@@ -56,6 +56,7 @@ class LiveLogin:
         self.connected_at = None
         self.last_sync_ms = 0
         self.authenticated = False
+        self.qr_png = None             # base64 QR image, shown in the wrapper UI
         self.init_bodies = []          # get_by_user_init protobuf bodies (backlog)
         self.init_request = None        # decoded init request envelope (history template)
         self.im_api_url = None          # a signed im-api URL to reuse for history
@@ -72,7 +73,7 @@ class LiveLogin:
     def public(self):
         return {"login_id": self.login_id, "state": self.state,
                 "account": self.account, "last_error": self.last_error,
-                "last_sync_ms": self.last_sync_ms}
+                "last_sync_ms": self.last_sync_ms, "qr": self.qr_png}
 
     def metrics_dict(self):
         return {"authenticated": self.authenticated, "last_sync_ms": self.last_sync_ms,
@@ -214,11 +215,15 @@ class LiveBridge:
         login = self.logins.get(login_id)
         if not login:
             return
+        # QR login runs fully HEADLESS -- the QR image is shown inside the wrapper
+        # UI, so there is no browser window at all. Password login needs a visible
+        # window (the user types into TikTok's own page), so it runs headful.
+        headless = True if login.flow == "qr" else self.headless
         try:
             # ONE persistent context for the whole flow -- login and sync. We never
             # close-and-reopen the same profile (that swap leaks windows and races
-            # the profile lock, esp. on macOS). The window stays open while syncing.
-            self._open_context(login, headless=self.headless)
+            # the profile lock, esp. on macOS).
+            self._open_context(login, headless=headless)
         except Exception as e:  # browser failed to launch (e.g. Chromium not installed)
             self._fail(login, ERROR, RuntimeError(
                 f"could not start the browser: {e}. Run ./setup.sh (installs "
@@ -233,9 +238,10 @@ class LiveBridge:
                 self._set_state(login, CONNECTING)
                 self._establish(login, cookies)     # already logged in
                 return
-            # need to log in: show the login page in the SAME window
+            # need to log in: QR -> generate + show in the UI; password -> the window
             start_url = QR_URL if login.flow == "qr" else LOGIN_URL
             login.page.goto(start_url, wait_until="domcontentloaded", timeout=45000)
+            login.page.wait_for_timeout(1500)       # let the QR image render/arrive
             self._set_state(login, WAITING_LOGIN)
         except Exception as e:
             self._fail(login, ERROR, e)
@@ -252,6 +258,13 @@ class LiveBridge:
 
     def _capture_init(self, login, resp):
         try:
+            if "get_qrcode" in resp.url:
+                data = resp.json().get("data", {})
+                if data.get("qrcode"):
+                    login.qr_png = data["qrcode"]   # base64 PNG shown in the wrapper
+                return
+            if "check_qrconnect" in resp.url:
+                return
             if "get_by_conversation" in resp.url:
                 return   # history pages are fetched on demand, not part of the backlog
             if "im-api.tiktok.com" in resp.url and "get_by_user_init" in resp.url:
@@ -335,8 +348,18 @@ class LiveBridge:
         login.provider.subscribe(lambda m: self._ingest_message(login, m))
         # identity + encrypted session at rest
         self._save_session(login)
-        # existing conversations: the page's own backlog fetch, captured on load
+        # existing conversations: the page's own backlog fetch, captured on load.
+        # The list loads asynchronously, so retry a few reloads until it arrives.
         self._ingest_init(login)
+        for _ in range(4):
+            if self.pipeline.list_threads(login.login_id):
+                break
+            try:
+                page.goto(MESSAGES_URL, wait_until="domcontentloaded", timeout=45000)
+                page.wait_for_timeout(3000)
+            except Exception:
+                break
+            self._ingest_init(login)
         # first sync (contacts, account label)
         self._sync_now(login, first=True)
         self._resolve_peers(login)

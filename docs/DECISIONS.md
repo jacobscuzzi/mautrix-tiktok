@@ -277,3 +277,16 @@ The login window stays open while syncing (a UI note says to keep it open; closi
 it disconnects). Also: a browser-launch failure now surfaces a clear "run ./setup.sh"
 message instead of crashing. Verified: existing session connects (one context);
 fresh QR reaches the login page with a single window and no crash.
+
+## Regressions after the one-context change (2026-09-19)
+Two issues after removing the context swap: (1) the login window no longer closed
+(the swap used to hide it), (2) existing chats sometimes did not show. Fixes:
+- QR login now runs FULLY HEADLESS and the QR image is shown inside the wrapper UI
+  (captured from the get_qrcode response -> login.qr_png -> /api/status -> <img>).
+  So there is no browser window at all for the QR flow -- the "window won't close"
+  problem is gone, and it works on macOS. Password login still uses a headful window
+  (the user must type into TikTok's page). Verified: QR captured headless, rendered
+  in the page.
+- Chats-not-showing: the conversation backlog (get_by_user_init) loads async, so
+  _establish now reloads /messages up to 4x until threads appear, and _sync_tick
+  re-ingests late backlog. Verified: existing session -> threads load.
