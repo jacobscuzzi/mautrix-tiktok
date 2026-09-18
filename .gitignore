@@ -11,3 +11,4 @@ state.json
 sessions/
 .chromium-libs/
 browser-data/
+*.claude/
