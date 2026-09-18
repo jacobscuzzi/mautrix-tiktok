@@ -56,7 +56,6 @@ class LiveLogin:
         self.connected_at = None
         self.last_sync_ms = 0
         self.authenticated = False
-        self.headful_login = False
         self.init_bodies = []          # get_by_user_init protobuf bodies (backlog)
         self.init_request = None        # decoded init request envelope (history template)
         self.im_api_url = None          # a signed im-api URL to reuse for history
@@ -216,28 +215,25 @@ class LiveBridge:
         if not login:
             return
         try:
-            # 1) reuse an existing alive session HEADLESS first (no visible window,
-            #    no new login) -- this is the common path after the first login.
-            self._open_context(login, headless=True)
-            login.headful_login = False
+            # ONE persistent context for the whole flow -- login and sync. We never
+            # close-and-reopen the same profile (that swap leaks windows and races
+            # the profile lock, esp. on macOS). The window stays open while syncing.
+            self._open_context(login, headless=self.headless)
+        except Exception as e:  # browser failed to launch (e.g. Chromium not installed)
+            self._fail(login, ERROR, RuntimeError(
+                f"could not start the browser: {e}. Run ./setup.sh (installs "
+                f"Playwright + Chromium)."))
+            return
+        try:
+            # try an existing session first
             login.page.goto(MESSAGES_URL, wait_until="domcontentloaded", timeout=45000)
             login.page.wait_for_timeout(2500)
             cookies = {c["name"]: c["value"] for c in login.ctx.cookies()}
             if cookies.get("sessionid") and "/login" not in login.page.url:
                 self._set_state(login, CONNECTING)
-                self._establish(login, cookies)     # connected, no window shown
+                self._establish(login, cookies)     # already logged in
                 return
-            # 2) no live session -> open a real login window (headful) once.
-            login.ctx.close()
-            login.ctx = None
-            login.page = None
-            for _ in range(20):
-                try:
-                    self._open_context(login, headless=self.headless)
-                    break
-                except Exception:
-                    time.sleep(0.5)
-            login.headful_login = not self.headless
+            # need to log in: show the login page in the SAME window
             start_url = QR_URL if login.flow == "qr" else LOGIN_URL
             login.page.goto(start_url, wait_until="domcontentloaded", timeout=45000)
             self._set_state(login, WAITING_LOGIN)
@@ -273,29 +269,6 @@ class LiveBridge:
         except Exception:
             pass
 
-    def _go_background(self, login):
-        """After login, close the visible window and reopen the SAME profile
-        headless so the session keeps syncing in the background."""
-        if not getattr(login, "headful_login", False):
-            return  # login was already headless: nothing visible to close
-        try:
-            self._save_session(login)          # persist before closing the window
-            login.ctx.close()
-        except Exception:
-            pass
-        login.ctx = None
-        login.page = None
-        # relaunch headless on the same profile (retry until the profile lock frees)
-        last = None
-        for _ in range(20):
-            try:
-                self._open_context(login, headless=True)
-                return
-            except Exception as e:
-                last = e
-                time.sleep(0.5)
-        raise last or RuntimeError("could not reopen background browser")
-
     def _attach_ws(self, login, ws):
         if "im-ws.tiktok.com" in ws.url and login.provider:
             ws.on("framereceived",
@@ -329,9 +302,8 @@ class LiveBridge:
                 return
             login.page.wait_for_timeout(300)   # pump events
             return
-        # logged in -> hand off to a background headless context, then connect
+        # logged in -> connect (same window keeps syncing)
         self._set_state(login, CONNECTING)
-        self._go_background(login)
         self._establish(login, cookies)
 
     @staticmethod

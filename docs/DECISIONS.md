@@ -263,3 +263,17 @@ allow-send: no by default). Removed: LiveBridge.send_message/_send/_open_convers
 _fetch_recent, the /api/send route, the UI composer + sendMsg, and the send test.
 Read path (contacts, threads, messages, realtime, history, health) is unchanged and
 robust. WebProvider.send_text still raises NotSupported to document the seam.
+
+## macOS: empty pages + 'NoneType has no attribute goto' (2026-09-19)
+Reported on macOS: clicking connect/QR opened many empty windows and errored with
+"'NoneType' object has no attribute 'goto'". Root cause: the context swap (open a
+headless context, close it, reopen the SAME profile headful for login, then swap
+back to headless after login). On macOS the profile lock isn't released immediately
+on close, so the reopen retry loop failed repeatedly, leaking a browser window each
+attempt (the "empty pages"), and left login.page = None -> the goto crash.
+Fix: removed the swap entirely (deleted _go_background). Now ONE persistent context
+per connect handles both login and sync -- no close-and-reopen of the same profile.
+The login window stays open while syncing (a UI note says to keep it open; closing
+it disconnects). Also: a browser-launch failure now surfaces a clear "run ./setup.sh"
+message instead of crashing. Verified: existing session connects (one context);
+fresh QR reaches the login page with a single window and no crash.
