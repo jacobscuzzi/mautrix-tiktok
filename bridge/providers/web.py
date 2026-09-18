@@ -186,8 +186,27 @@ class WebProvider:
         return users, str(resp.get("min_time") or ""), bool(resp.get("has_more"))
 
     def get_profile(self, user_id):
-        resp = self.page.call("GET", PROFILE_URL, {"uid": user_id})
-        return normalize.to_user(parse_profile(resp))
+        return self.get_profiles([user_id])[0]
+
+    def get_profiles(self, user_ids):
+        # the page's own call is GET .../im/user/profile/?user_ids=["<uid>",...]  [Obs]
+        import json as _json
+        resp = self.page.call("GET", PROFILE_URL,
+                              {"user_ids": _json.dumps([str(u) for u in user_ids]),
+                               "aid": "1988"})
+        users = _require(resp, "users")
+        out = []
+        for u in users:
+            p = u.get("im_user_profile") if isinstance(u, dict) else None
+            if not p:
+                continue
+            out.append(normalize.to_user({
+                "user_id": p.get("user_id_str") or str(p.get("user_id") or ""),
+                "unique_id": p.get("unique_id") or "", "nick_name": p.get("nick_name") or "",
+                "sec_uid": p.get("sec_uid") or "", "avatars": p.get("avatars")}))
+        if not out:
+            raise errors.SchemaChange("empty users in profile response")
+        return out
 
     def send_text(self, conv_id, text, client_message_id=""):
         # No send_text fixture was captured (allow-send: no). Refuse honestly

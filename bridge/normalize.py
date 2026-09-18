@@ -173,6 +173,9 @@ def to_event(d):
     media_kind, media_url = _media_of(raw)
     if media_url:
         kind, body = media_kind, media_url
+    elif isinstance(raw, str) and raw.strip() == "{}":
+        # a sticker whose media rides outside the content JSON [Obs]: label it
+        kind, body = "sticker", ""
     else:
         kind, body = _kind_of(d, text), text
     return Event(

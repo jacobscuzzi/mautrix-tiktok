@@ -117,14 +117,25 @@ async function openThread(tid, name) {
   await loadMessages(tid);
 }
 
+let LAST_RENDER = "";   // thread + last message id: skip re-render when nothing changed
+
 async function loadMessages(tid) {
   const msgs = await api(`/api/messages?login_id=${LOGIN_ID}&thread_id=${encodeURIComponent(tid)}`);
+  const box = $("msgs");
   if (!msgs.length) {
-    $("msgs").innerHTML = `<div class="empty">No messages synced yet in this conversation.</div>`;
+    box.innerHTML = `<div class="empty">No messages synced yet in this conversation.</div>`;
+    LAST_RENDER = tid + ":empty";
     return;
   }
+  const sig = tid + ":" + msgs.length + ":" + msgs[msgs.length - 1].message_id;
+  if (sig === LAST_RENDER) return;              // unchanged: keep the user's scroll position
+  const switched = !LAST_RENDER.startsWith(tid + ":");
+  // stick to the bottom only if the user was already there (or just opened the thread)
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  const prevTop = box.scrollTop;
+  LAST_RENDER = sig;
   const MEDIA = ["gif", "image", "sticker"];
-  $("msgs").innerHTML = msgs.map((m) => {
+  box.innerHTML = msgs.map((m) => {
     const me = m.sender_id === SELF_UID;
     const who = !me ? `<div class="who">${m.sender_id.slice(-6)}</div>` : "";
     let inner;
@@ -136,7 +147,8 @@ async function loadMessages(tid) {
     }
     return `<div class="bubble ${me ? "me" : ""}">${who}${inner}</div>`;
   }).join("");
-  const box = $("msgs"); box.scrollTop = box.scrollHeight;
+  if (switched || atBottom) box.scrollTop = box.scrollHeight;   // newest at the bottom
+  else box.scrollTop = prevTop;                                  // user scrolled up: leave them
 }
 
 function escapeHtml(s) { return (s || "").replace(/[&<>"]/g, (c) =>

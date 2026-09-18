@@ -151,3 +151,31 @@ def messages_from_frame(raw):
 
 def dedup_key(frame_headers, message_id):
     return f"{frame_headers.get('x_frontier_msg_id', '')}:{message_id}"
+
+
+def messages_from_init_body(raw_body):
+    """Existing conversations' recent messages from the REST inbox init.
+
+    `POST im-api.tiktok.com/v2/message/get_by_user_init` (protobuf, made by the
+    /messages page itself on load) carries the backlog at
+    `body -> f6 -> f203 -> f1[]`, each entry being the SAME Message shape as a
+    frontier frame (f1 conv, f3 id, f4 ts_us, f7 sender, f8 content). Confirmed
+    live 2026-09-18 (16 messages across several conversations). Yields normalized
+    message dicts; never raises.
+    """
+    try:
+        tree = proto.decode_tree(raw_body)
+    except Exception as e:
+        log.debug("init body decode failed: %s", e)
+        return
+    for wrapper in tree.get(6, []):
+        if not isinstance(wrapper, dict):
+            continue
+        for block in wrapper.get(203, []):
+            if not isinstance(block, dict):
+                continue
+            for m in block.get(1, []):
+                if isinstance(m, dict):
+                    rec = _message_from_inner(m, None)
+                    if rec:
+                        yield rec

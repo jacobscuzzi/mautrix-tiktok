@@ -109,6 +109,34 @@ class TestFrontier(unittest.TestCase):
         self.assertGreater(found, 0, "expected at least one real DM in the G4 capture")
 
 
+class TestInitBacklog(unittest.TestCase):
+    def _init_body(self, messages):
+        # real layout (confirmed live): body f6 -> f203 -> f1[] = Message
+        block = bytearray()
+        for conv, mid, ts_us, sender, content in messages:
+            block += proto.encode_fields({1: proto.encode_fields(
+                {1: conv.encode(), 3: mid, 4: ts_us, 7: sender, 8: content.encode()})})
+        return proto.encode_fields({1: 203, 4: b"OK",
+                                    6: proto.encode_fields({203: bytes(block)})})
+
+    def test_backlog_yields_every_message_across_conversations(self):
+        body = self._init_body([
+            ("0:1:1:2", 101, 1789751000000000, 2, '{"aweType":0,"text":"old one"}'),
+            ("0:1:1:2", 102, 1789751001000000, 1, '{"aweType":0,"text":"old two"}'),
+            ("0:1:1:3", 201, 1789751002000000, 3, '{"aweType":0,"text":"other chat"}'),
+        ])
+        msgs = list(frontier.messages_from_init_body(body))
+        self.assertEqual([m["server_message_id"] for m in msgs], ["101", "102", "201"])
+        self.assertEqual({m["conversation_id"] for m in msgs}, {"0:1:1:2", "0:1:1:3"})
+        self.assertEqual(msgs[1]["sender"], "1")
+        self.assertEqual(msgs[2]["content"], "other chat")
+
+    def test_backlog_skips_commands_and_garbage(self):
+        body = self._init_body([("0:1:1:2", 5, 1, 2, '{"command_type":1}')])
+        self.assertEqual(list(frontier.messages_from_init_body(body)), [])
+        self.assertEqual(list(frontier.messages_from_init_body(b"\xff\x00junk")), [])
+
+
 class TestFrontierThroughProvider(unittest.TestCase):
     def test_provider_emits_and_flags_gap(self):
         class P:

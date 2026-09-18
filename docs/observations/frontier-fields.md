@@ -54,3 +54,26 @@ Notes:
 The parser is `bridge/web/frontier.py::messages_from_frame`; the committed
 `tests/fixtures/web/ws_inbound_dm.json` reproduces this layout with neutral text
 and pseudonymized ids (a friend's real messages stay only in the gitignored capture).
+
+## Existing-conversation backlog: REST init [Obs] (confirmed live 2026-09-18)
+
+The frontier does **not** replay history on connect (0 messages, 1 sync frame on a
+populated account). The backlog comes from the page's own
+`POST im-api.tiktok.com/v2/message/get_by_user_init` (protobuf), captured when
+`/messages` loads:
+
+```
+body
+  f1: 203   f4: "OK"   f15: own uid
+  f6:
+    f203:
+      f1 (repeated): Message   <- IDENTICAL shape to the frontier Message
+        f1 conversation_id | f3 server_message_id | f4 create_time (us) |
+        f7 sender_id | f8 content JSON | f14 sender sec_uid
+```
+
+16 messages across several conversations were decoded live with this. Parser:
+`bridge/web/frontier.py::messages_from_init_body`; the live bridge captures the
+response on connect (`LiveBridge._capture_init` / `_ingest_init`) so existing chats
+render immediately. Peer names/avatars for non-followed contacts come from
+`GET /tiktok/v1/im/user/profile/?user_ids=["<uid>"]` (`WebProvider.get_profiles`).

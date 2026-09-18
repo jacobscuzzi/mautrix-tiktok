@@ -131,3 +131,18 @@ UI shows a data-handling explainer before login. Non-browser plumbing is unit-te
   A message whose text merely contains a URL stays text. If TikTok wraps a GIF in an
   unexpected shape, the generic URL search still catches it; a bad URL falls back to
   a "[gif]" label via onerror.
+
+## Demo UX: existing chats on connect + scroll (2026-09-18)
+- Reported: fresh login showed no existing chats until a new DM arrived. Probed live:
+  the frontier does NOT replay history on connect (0 msgs, 1 sync frame); the DOM has
+  only nicknames/previews; the backlog is the page's own protobuf
+  `get_by_user_init` (6.7 KB populated). Its messages are the SAME Message shape as
+  frontier frames at `f6 -> f203 -> f1[]`, so the frontier parser is reused
+  (`messages_from_init_body`). LiveBridge captures that response on `/messages` load
+  and ingests it on connect. Verified live: 2 conversations x 5 messages appear
+  within ~6 s of connect with no new message sent.
+- Peer names/avatars for non-followed contacts via `GET /tiktok/v1/im/user/profile/
+  ?user_ids=[...]` (`WebProvider.get_profiles`; the old `uid` param was wrong).
+- Chat scroll: newest stays at the bottom; re-render only when messages changed; if
+  the user scrolled up, their position is kept (no yank on the 5 s poll).
+- A sticker whose content is `{}` is labeled `[sticker]` instead of an empty bubble.

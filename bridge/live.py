@@ -56,6 +56,8 @@ class LiveLogin:
         self.last_sync_ms = 0
         self.authenticated = False
         self.headful_login = False
+        self.init_bodies = []          # get_by_user_init protobuf bodies (backlog)
+        self.known_users = set()
         # worker-thread-only:
         self.ctx = None
         self.page = None
@@ -187,6 +189,16 @@ class LiveBridge:
         login.ctx = ctx
         login.page = ctx.pages[0] if ctx.pages else ctx.new_page()
         login.page.on("websocket", lambda ws: self._attach_ws(login, ws))
+        # the /messages page fetches the existing-conversation backlog itself
+        # (protobuf get_by_user_init); capture it so existing chats show at once.
+        ctx.on("response", lambda r: self._capture_init(login, r))
+
+    def _capture_init(self, login, resp):
+        try:
+            if "im-api.tiktok.com" in resp.url and "get_by_user_init" in resp.url:
+                login.init_bodies.append(resp.body())
+        except Exception:
+            pass
 
     def _go_background(self, login):
         """After login, close the visible window and reopen the SAME profile
@@ -255,11 +267,47 @@ class LiveBridge:
         login.provider.subscribe(lambda m: self._ingest_message(login, m))
         # identity + encrypted session at rest
         self._save_session(login)
-        # first sync
+        # existing conversations: the page's own backlog fetch, captured on load
+        self._ingest_init(login)
+        # first sync (contacts, account label)
         self._sync_now(login, first=True)
+        self._resolve_peers(login)
         login.authenticated = True
         login.connected_at = time.time()
         self._set_state(login, CONNECTED)
+
+    def _ingest_init(self, login):
+        """Ingest the existing-conversation backlog from captured init bodies."""
+        from .web import frontier
+        bodies, login.init_bodies = login.init_bodies, []
+        n = 0
+        for body in bodies:
+            for m in frontier.messages_from_init_body(body):
+                self._ingest_message(login, m)
+                n += 1
+        return n
+
+    def _resolve_peers(self, login):
+        """Give every conversation peer a name + avatar via the profile endpoint."""
+        prov = login.provider
+        if not prov:
+            return
+        own = (login.account or {}).get("uid") or self._own_uid(login)
+        peers = set()
+        for t in self.pipeline.list_threads(login.login_id):
+            for uid in (t.get("thread_id") or "").split(":")[2:]:
+                if uid and uid != own:
+                    peers.add(uid)
+        known = {u["user_id"] for u in self.pipeline.list_contacts(login.login_id)}
+        todo = [p for p in peers if p not in known and p not in login.known_users]
+        if not todo:
+            return
+        try:
+            for u in prov.get_profiles(todo[:50]):
+                self.pipeline.upsert_user(login.login_id, u)
+                login.known_users.add(u.user_id)
+        except errors.BridgeError:
+            login.known_users.update(todo)   # do not retry every tick
 
     def _save_session(self, login):
         try:
@@ -297,6 +345,7 @@ class LiveBridge:
             pass
         if time.time() * 1000 - login.last_sync_ms >= self.poll_seconds * 1000:
             self._sync_now(login)
+            self._resolve_peers(login)   # name any new conversation peers
 
     def _sync_now(self, login, first=False):
         prov = login.provider
