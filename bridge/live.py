@@ -359,9 +359,16 @@ class LiveBridge:
 
     def _establish(self, login, cookies):
         page = login.page
+        # Clear any stale data from a previous session/account so the shown chats
+        # always match the account that is actually logged in now. Without this the
+        # UI shows phantom conversations that no longer exist -> sending to them
+        # fails ("could not open that conversation").
+        self.pipeline.wipe_login(login.login_id)
+        self.pipeline.upsert_login(login.login_id, source="web", state=CONNECTING,
+                                   password_login_used=login.password_login_used)
         try:
             page.goto(MESSAGES_URL, wait_until="domcontentloaded", timeout=45000)
-            page.wait_for_timeout(3000)
+            page.wait_for_timeout(3500)
         except Exception:
             pass
         pc = PageClient(playwright_evaluator(page))
@@ -564,6 +571,9 @@ class LiveBridge:
             login.page.wait_for_timeout(300)
         except Exception:
             pass
+        # a conversation list that rendered after connect: ingest it now
+        if login.init_bodies:
+            self._ingest_init(login)
         if time.time() * 1000 - login.last_sync_ms >= self.poll_seconds * 1000:
             self._sync_now(login)
             self._resolve_peers(login)   # name any new conversation peers

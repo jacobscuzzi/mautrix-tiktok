@@ -127,8 +127,13 @@ async function refreshChats() {
     return `<div class="row" style="opacity:.7"><div>${av}</div><div><div class="name">${c.nickname || c.handle}</div>
             <div class="sub">contact</div></div></div>`;
   });
-  $("threads").innerHTML = rows.join("") + extra.join("") ||
-    `<div style="padding:16px;color:var(--muted)">Syncing your conversations…</div>`;
+  let header = "";
+  if (rows.length === 0) {
+    header = extra.length
+      ? `<div style="padding:12px 14px;color:var(--muted);font-size:13px;border-bottom:1px solid var(--line)">No conversations in this account yet — the people you follow are below. Open TikTok to start a chat, then it appears here.</div>`
+      : `<div style="padding:16px;color:var(--muted)">Syncing… if this stays empty, this account has no conversations.</div>`;
+  }
+  $("threads").innerHTML = header + rows.join("") + extra.join("");
   if (CUR_THREAD) loadMessages(CUR_THREAD);
 }
 

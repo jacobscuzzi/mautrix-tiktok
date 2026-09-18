@@ -235,3 +235,18 @@ server (get_by_conversation, cursor=now) and ingests them, so the message shows 
 once with its real id (sender = self -> a "me" bubble). Never re-sends. Verified
 live: send -> ok, message appears in the chat. (Two test messages were sent to the
 test conversation during diagnosis/verification.)
+
+## Phantom chats -> send failed (2026-09-19)
+Reported: messages don't send from the UI and don't show. The full HTTP path and a
+direct send both worked, so the bug was state, not code. Diagnosed live: the running
+app's stable session was logged into an account (Contact 34) whose /messages
+list is EMPTY (0 conversations), but the persistent bridge.sqlite still held a stale
+conversation from a previous session/account under the same login_id "session". The
+UI showed that phantom conversation; opening it and sending failed because
+_open_conversation finds no matching item on the live page.
+Fix: `_establish` wipes the pipeline for the login before re-syncing, so the shown
+chats always match the account that is actually logged in. `_sync_tick` also
+re-ingests the init backlog if the conversation list renders after connect (async).
+Verified live: empty account -> 0 threads (no phantom); account with chats -> threads
+show and send works (5 -> 15). UI shows a clear "no conversations in this account"
+note. Users with lots of old cruft under browser-data/_live can delete it to reset.
