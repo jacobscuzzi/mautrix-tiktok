@@ -22,6 +22,13 @@ context compaction, re-read `docs/BRIEF.md` §0 and this file before doing anyth
   real headless browser (6 e2e) + unit tests; secrets-not-logged test. G3 real
   attempt deferred to morning. Tests: 165 (1 skipped).
 
-CURRENT: Task C done.
+- Task D - bridge/pipeline.py (SQLite raw layer, idempotent upsert, webhook +
+  dead-letter), bridge/api.py (stdlib http.server, Bearer auth, login start/step/
+  status/delete, contacts/threads/messages, /metrics), BridgeRuntime (N logins,
+  dead session -> needs_user, never spins), metrics leading indicators +
+  Prometheus, scripts/demo.sh + bridge/cmd/demo.py -> docs/demo-transcript.md,
+  scripts/export-session.py. Tests: 180 (1 skipped).
+
+CURRENT: Task D build done; attempting G4 live read-only import next.
 NEXT: Task D (API + pipeline + SQLite + demo, and G4 live read-only import), then
 Task E (docs distill), F (iPhone assets).
