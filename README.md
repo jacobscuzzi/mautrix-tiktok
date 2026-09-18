@@ -78,7 +78,7 @@ wrapper is `wrapper/`.
 ## Run it
 
 ```bash
-.venv/bin/python -m unittest discover -s tests      # 191 tests (1 skipped if no browser)
+.venv/bin/python -m unittest discover -s tests      # 197 tests (1 skipped if no browser)
 ./scripts/demo.sh                                   # end-to-end API demo -> docs/demo-transcript.md
 ```
 
@@ -121,7 +121,7 @@ normalize, SQLite store, metrics — is shared by all three.
 ```
 bridge/
   live.py            the running bridge: one browser worker per user (login,
-                     sync, realtime, send, history) — drives the demo app
+                     sync, realtime, history) — drives the demo app
   webapp.py          bridge HTTP API (JSON + /metrics), backed by live.py
   pipeline.py        SQLite raw layer (logins/users/threads/events), idempotent
   sync.py state.py   backfill + poll with dedup; cursors + watermarks

@@ -250,3 +250,16 @@ re-ingests the init backlog if the conversation list renders after connect (asyn
 Verified live: empty account -> 0 threads (no phantom); account with chats -> threads
 show and send works (5 -> 15). UI shows a clear "no conversations in this account"
 note. Users with lots of old cruft under browser-data/_live can delete it to reset.
+
+## Remove the send feature (2026-09-19)
+Decision (user-approved): remove outbound send; keep the read-only bridge. Reason:
+measured live that the web DM send is a signed frame over the frontier WebSocket
+(the outbound frame carried the message text; no REST /message/send is used), and
+the frame is signed by TikTok's own webmssdk in the page. There is no request to
+replay robustly, so sending can only be done by driving the live composer in the
+background browser -- inherently fragile (account state, DOM, timing) and repeatedly
+unreliable in practice. Sending was also out of the case study's core (read-focused,
+allow-send: no by default). Removed: LiveBridge.send_message/_send/_open_conversation/
+_fetch_recent, the /api/send route, the UI composer + sendMsg, and the send test.
+Read path (contacts, threads, messages, realtime, history, health) is unchanged and
+robust. WebProvider.send_text still raises NotSupported to document the seam.

@@ -249,7 +249,9 @@ egress stays a documented lever, not a build target.
   retried, locked = blocked) driven by a real headless browser.
 - **Not built:** the live web conversation-list JSON mirror (REST inbox was empty —
   synthetic-tested; but the realtime message body IS captured live); outbound send /
-  mark-read over the web channel (no fixture, allow-send was no); the Go mautrix
+  mark-read (the web DM send is a signed WebSocket frame built by TikTok's own
+  page JS, so there is no request to replay; sending would mean driving the live
+  composer in the browser -- too fragile to ship, so it is read-only); the Go mautrix
   appservice (mapping documented, §9); mobile device registration (TTEncrypt).
 
 ---

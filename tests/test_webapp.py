@@ -68,10 +68,6 @@ class StubLive:
         self.pipeline.ingest_event(Event("m0", tid, "7072", "older one", 1), lid)
         return {"added": 1, "has_more": False}
 
-    def send_message(self, lid, tid, text):
-        # stub: record the sent message as our own (sender = self uid)
-        self.pipeline.ingest_event(Event("sent1", tid, "42", text, 999), lid)
-        return {"ok": True}
 
     def metrics_text(self):
         from bridge.metrics import render_prometheus
@@ -146,14 +142,6 @@ class TestWebapp(unittest.TestCase):
         self._post("/api/connect", {"flow": "bogus"})
         self.assertEqual(self.live.last_flow, "password")   # invalid -> password
 
-    def test_send_endpoint(self):
-        _, res = self._post("/api/connect")
-        lid = res["login_id"]
-        _, out = self._post("/api/send", {"login_id": lid, "thread_id": "0:1:42:7072",
-                                          "text": "hi from the tester"})
-        self.assertTrue(out["ok"])
-        _, msgs = self._get_json(f"/api/messages?login_id={lid}&thread_id=0:1:42:7072")
-        self.assertTrue(any(m["content"] == "hi from the tester" for m in msgs))
 
     def test_load_older_endpoint(self):
         _, res = self._post("/api/connect")
