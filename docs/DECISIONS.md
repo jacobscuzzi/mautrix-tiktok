@@ -55,3 +55,14 @@ observation in docs/observations/tiktok-web-dm-2026-09-18.md. Continued to Task 
   fixture, allow-send: no) rather than blind-firing · never send an unverified
   request against a real account · capture with --allow-send, add the fixture,
   implement.
+
+## G3 handling (Task C)
+Per §0.5 no real-account password login overnight. The ladder is proven against
+the fake platform only: 6 real-headless-browser e2e cases (first login, session
+reuse across restart with zero logins, logged-out-elsewhere -> exactly one login,
+wrong password -> bad_credentials, 2FA -> needs_user, locked -> blocked) plus the
+pure state-machine unit tests. The real attempt is a morning gate in FINISH-HERE.md.
+
+- 2026-09-18 · Quote attribute values in the pinned CSS selectors
+  (`[data-e2e="2fa-input"]`) · Chromium rejects unquoted attribute values that
+  start with a digit · none.

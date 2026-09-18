@@ -1,5 +1,11 @@
 from dataclasses import dataclass, field
 
+# bridgev2 login-step vocabulary per mode:
+#   password = user_input, qr = display_and_wait, email = user_input, cookies = cookies
+LOGIN_MODES = {"password": "user_input", "qr": "display_and_wait",
+               "email": "user_input", "cookies": "cookies", "browser": "cookies"}
+
+
 @dataclass
 class LoginStep:
     kind: str
@@ -27,6 +33,9 @@ class LoginProcess:
             self.email.send_code()
             return LoginStep("user_input", "Enter the code sent to your email",
                              {"field": "email_code"})
+        if mode == "password":
+            return LoginStep("user_input", "Enter your TikTok username and password",
+                             {"fields": ["username", "password"]})
         return LoginStep("cookies", "Log in on TikTok's page")
 
     def advance(self):

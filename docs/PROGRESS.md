@@ -15,6 +15,13 @@ context compaction, re-read `docs/BRIEF.md` §0 and this file before doing anyth
   WebProvider driven through the real Syncer with dedup; SchemaChange on renamed
   field; frontier decode; avatar allowlist. Tests: 146 (1 skipped).
 
-CURRENT: Task B done.
-NEXT: Task C - password ladder + cookies import + tests/fake_platform.py; then
-Task D (API + pipeline + demo), E (docs), F (iPhone assets).
+- Task C - web_password_login.py (Ladder state machine + PlaywrightPasswordDriver,
+  selectors pinned from the capture), web_cookie_import.py (fingerprint-mismatch
+  guard), password/cookies registered in login.py; tests/fake_platform.py (real
+  HTTP: login/wrong-pw/2fa/lock/inbox). Ladder proven vs the fake platform with a
+  real headless browser (6 e2e) + unit tests; secrets-not-logged test. G3 real
+  attempt deferred to morning. Tests: 165 (1 skipped).
+
+CURRENT: Task C done.
+NEXT: Task D (API + pipeline + SQLite + demo, and G4 live read-only import), then
+Task E (docs distill), F (iPhone assets).
