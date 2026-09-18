@@ -11,3 +11,12 @@ class IMNotInitialized(BridgeError): pass
 class SignerStale(BridgeError): pass
 class Transient(BridgeError): pass
 class InvalidRequest(BridgeError): pass
+
+
+# Web path additions.
+class SchemaChange(BridgeError):
+    """A parser hit a renamed/missing field: TikTok changed the response shape."""
+
+
+class NotSupported(BridgeError):
+    """The capability is not available on this provider (e.g. no send fixture)."""

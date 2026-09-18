@@ -55,4 +55,5 @@ except Exception:  # keep the seam importable even if im.py is mid-refactor
 def describe(provider) -> str:
     """Human label for logs/metrics without leaking a session."""
     cls = type(provider).__name__
-    return {"IM": "native", "TikApiProvider": "tikapi"}.get(cls, cls)
+    return {"IM": "native", "TikApiProvider": "tikapi",
+            "WebProvider": "web"}.get(cls, cls)

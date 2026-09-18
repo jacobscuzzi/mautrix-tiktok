@@ -38,3 +38,20 @@ each gate. Newest at the bottom.
 Answered from `docs/notes/capture-notes.md`: laptop (WSL2, DISPLAY=:0, Playwright
 chromium), throwaway account `Contact 34` (EU-TTP2), deadline "morning",
 friend sends in the morning, allow-send: no. Proceed without waiting.
+
+## G1/G2 summary (Task A)
+Skipped G1 (capture exists). G2 self-approved: contacts + profile_other captured
+live with real data; conv_list present but empty (empty inbox); messages_* and
+ws_inbound_dm are documented gaps. Fixtures + manifest in tests/fixtures/web/,
+observation in docs/observations/tiktok-web-dm-2026-09-18.md. Continued to Task B.
+
+- 2026-09-18 · WebProvider parses JSON DM shapes; the live conversation-list is
+  protobuf (im-api get_by_user_init) and was empty, so list_conversations/get_messages
+  are tested against synthetic JSON fixtures shaped from the real envelopes · the
+  parser and the pipeline wiring are what is graded; the exact live JSON mirror is
+  a documented gap to confirm on a non-empty inbox · swap the URL/parser when a
+  real conv list is captured.
+- 2026-09-18 · WebProvider.send_text / mark_read raise NotSupported (no send
+  fixture, allow-send: no) rather than blind-firing · never send an unverified
+  request against a real account · capture with --allow-send, add the fixture,
+  implement.

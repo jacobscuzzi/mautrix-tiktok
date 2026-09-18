@@ -8,6 +8,13 @@ context compaction, re-read `docs/BRIEF.md` §0 and this file before doing anyth
   wrote capture-notes, DECISIONS, PROGRESS, CLAUDE.md. Tests: 100 (1 signer test
   skipped when SignerPy absent).
 
-CURRENT: Task 0 wrap-up / starting Task A.
-NEXT: build `scripts/redact-capture.py` + `scripts/decode-frontier.py` against the
-real capture, emit `tests/fixtures/web/` + manifest, write the observation doc (G2).
+- Task A - capture tool (bridge/cmd/capture.py + browser.py), redact-capture.py,
+  decode-frontier.py, fixtures + manifest, observation doc (G2 self-approved).
+- Task B - bridge/web/{session,page,frontier}.py + providers/web.py; normalize
+  extended (kind/handle/sec_uid/last_ts, additive); parsers fixture-tested;
+  WebProvider driven through the real Syncer with dedup; SchemaChange on renamed
+  field; frontier decode; avatar allowlist. Tests: 146 (1 skipped).
+
+CURRENT: Task B done.
+NEXT: Task C - password ladder + cookies import + tests/fake_platform.py; then
+Task D (API + pipeline + demo), E (docs), F (iPhone assets).
