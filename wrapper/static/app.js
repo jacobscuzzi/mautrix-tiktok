@@ -121,8 +121,34 @@ async function openThread(tid, name) {
   $("peer").textContent = name || "Conversation";
   LAST_RENDER = "";                       // force a fresh render + scroll to bottom
   $("older").classList.remove("hidden", "loading");   // offer "load older"
+  $("composer").classList.remove("hidden");           // show the send box
   document.querySelectorAll(".threads .row").forEach((r) => r.classList.remove("active"));
   await loadMessages(tid, { force: true, toBottom: true });
+}
+
+async function sendMsg(ev) {
+  ev.preventDefault();
+  const input = $("composer-input");
+  const text = input.value.trim();
+  if (!text || !CUR_THREAD) return false;
+  $("composer").classList.add("sending");
+  input.value = "";
+  let res;
+  try {
+    res = await api("/api/send", { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ login_id: LOGIN_ID, thread_id: CUR_THREAD, text }) });
+  } catch (e) { res = { ok: false, error: "send failed" }; }
+  if (!res.ok) {
+    input.value = text;                          // restore so it isn't lost
+    $("peer").setAttribute("title", res.error || "send failed");
+    alert("Could not send: " + (res.error || "unknown error"));
+  } else {
+    await loadMessages(CUR_THREAD, { force: true, toBottom: true });  // show our message
+  }
+  $("composer").classList.remove("sending");
+  input.focus();
+  return false;
 }
 
 async function loadOlder() {

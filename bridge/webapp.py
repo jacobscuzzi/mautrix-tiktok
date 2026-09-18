@@ -91,6 +91,14 @@ class _Handler(BaseHTTPRequestHandler):
             except Exception as e:  # noqa: BLE001
                 return self._json(200, {"added": 0, "has_more": False, "error": str(e)})
             return self._json(200, res)
+        if u.path == "/api/send":
+            b = self._body()
+            try:
+                res = self.live.send_message(b.get("login_id", ""), b.get("thread_id", ""),
+                                             b.get("text", ""))
+            except Exception as e:  # noqa: BLE001
+                return self._json(200, {"ok": False, "error": str(e)})
+            return self._json(200, res)
         return self._json(404, {"error": "not found"})
 
     def do_OPTIONS(self):

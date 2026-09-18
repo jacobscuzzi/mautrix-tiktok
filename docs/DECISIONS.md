@@ -185,3 +185,18 @@ session is captured the same way. flow is threaded through connect() and the API
 password_login_used is False for QR (more accurate leading indicator). UI: two buttons
 ("Scan a QR code" / "Use password / email"). Verified live: the QR page opens with a
 real QR rendered.
+
+## Send messages (2026-09-18)
+Added outbound text by driving TikTok's OWN composer (the page signs the send), not
+by crafting a signed send request -- the most human-like and lowest-fragility path.
+Composer probed live: a Draft.js `[contenteditable][role=textbox]` ("Send a message…"),
+no send button -> Enter sends. Flow (LiveBridge._send, worker submit): open the target
+conversation (click items, verify via the get_by_conversation conv id), focus the
+editor, type, press Enter. Honors the invariants: ONE send at a time (login.sending
+guard), and NEVER blind-replays -- one send, confirmed by our own message returning
+over the frontier (already ingested/rendered as a "me" bubble); an ambiguous result is
+not retried. API POST /api/send; UI adds a send box per conversation. Verified live up
+to the send WITHOUT sending (typed a draft into the editor, read it back, cleared it);
+the first real send is left to the user (outward-facing: it DMs a real contact). Risk
+noted: automated sending is a stronger bot/ban signal than reading, so keep it gentle
+and per the user's explicit request.

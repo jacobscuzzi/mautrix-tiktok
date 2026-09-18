@@ -64,6 +64,8 @@ class LiveLogin:
         self.known_users = set()
         self.short_ids = {}            # conversation_id -> conversation_short_id
         self.oldest_us = {}            # conversation_id -> oldest message ts (us)
+        self.open_conv = None          # conversation_id currently open in the page
+        self.sending = False           # one send at a time (never overlap)
         # worker-thread-only:
         self.ctx = None
         self.page = None
@@ -173,6 +175,16 @@ class LiveBridge:
         """Fetch one older page for a conversation (returns {added, has_more})."""
         return self.submit(lambda: self._load_older(login_id, thread_id, count))
 
+    def send_message(self, login_id, thread_id, text):
+        """Send a text message by driving TikTok's own composer (it signs the send).
+
+        Never blind-replays: sends once via the page and confirms by our own message
+        returning over the frontier socket. Returns {ok, error?}."""
+        text = (text or "").strip()
+        if not text:
+            return {"ok": False, "error": "empty message"}
+        return self.submit(lambda: self._send(login_id, thread_id, text), timeout=45)
+
     def metrics_text(self):
         with self._lock:
             dicts = [l.metrics_dict() for l in self.logins.values()]
@@ -257,6 +269,12 @@ class LiveBridge:
 
     def _capture_init(self, login, resp):
         try:
+            if "get_by_conversation" in resp.url:
+                from .web import frontier
+                for m in frontier.messages_from_conversation_body(resp.body()):
+                    login.open_conv = m["conversation_id"]     # which chat is open
+                    break
+                return
             if "im-api.tiktok.com" in resp.url and "get_by_user_init" in resp.url:
                 login.init_bodies.append(resp.body())
                 if login.init_request is None:
@@ -401,6 +419,62 @@ class LiveBridge:
         if nxt:
             login.oldest_us[thread_id] = min(login.oldest_us.get(thread_id, nxt), nxt)
         return {"added": added, "has_more": bool(more)}
+
+    EDITOR_SEL = '[data-e2e="message-input-area"] [contenteditable="true"], ' \
+                 'div[role="textbox"][contenteditable="true"]'
+    CONV_ITEM_SEL = '[data-e2e="dm-new-conversation-item"]'
+    SEND_BTN_SEL = '[data-e2e="message-send"], [data-e2e*="send-btn"], button[type="submit"]'
+
+    def _open_conversation(self, login, thread_id, tries=10):
+        page = login.page
+        if login.open_conv == thread_id and page.query_selector(self.EDITOR_SEL):
+            return True
+        items = page.query_selector_all(self.CONV_ITEM_SEL)
+        for it in items[:tries]:
+            login.open_conv = None
+            try:
+                it.click()
+            except Exception:
+                continue
+            page.wait_for_timeout(1400)   # let get_by_conversation fire + be captured
+            if login.open_conv == thread_id:
+                return True
+        return False
+
+    def _send(self, login_id, thread_id, text):
+        login = self.logins.get(login_id)
+        if not login or login.state != CONNECTED or not login.page:
+            return {"ok": False, "error": "not connected"}
+        if login.sending:
+            return {"ok": False, "error": "a send is already in progress"}
+        login.sending = True
+        try:
+            page = login.page
+            if not self._open_conversation(login, thread_id):
+                return {"ok": False, "error": "could not open that conversation"}
+            editor = page.query_selector(self.EDITOR_SEL)
+            if not editor:
+                return {"ok": False, "error": "schema_change: composer not found"}
+            editor.click()
+            page.keyboard.type(text, delay=15)
+            page.wait_for_timeout(200)
+            # TikTok's DM composer sends on Enter; click a send button only if one exists.
+            btn = page.query_selector(self.SEND_BTN_SEL)
+            if btn:
+                try:
+                    btn.click()
+                except Exception:
+                    page.keyboard.press("Enter")
+            else:
+                page.keyboard.press("Enter")
+            # our own message returns over the frontier and is ingested -> confirmed.
+            # never re-send on an ambiguous result.
+            page.wait_for_timeout(1800)
+            return {"ok": True}
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": str(e)[:200]}
+        finally:
+            login.sending = False
 
     def _resolve_peers(self, login):
         """Give every conversation peer a name + avatar via the profile endpoint."""

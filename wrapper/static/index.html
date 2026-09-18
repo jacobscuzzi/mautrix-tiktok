@@ -61,6 +61,12 @@
   .older{text-align:center;padding:8px;border-bottom:1px solid var(--line)}
   .older button{font-size:13px;padding:6px 14px}
   .older.loading button{opacity:.6;pointer-events:none}
+  .composer{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}
+  .composer input{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:9px;
+       color:var(--text);padding:9px 12px;font:inherit;outline:none}
+  .composer input:focus{border-color:var(--accent)}
+  .composer button{padding:9px 18px}
+  .composer.sending button{opacity:.6;pointer-events:none}
   .peer{padding:12px 16px;border-bottom:1px solid var(--line);font-weight:600}
   .acct{display:flex;align-items:center;gap:12px}
   .acct .h{font-weight:700}.acct .u{color:var(--muted);font-size:13px}
@@ -136,6 +142,10 @@
         <div class="peer" id="peer">Select a conversation</div>
         <div id="older" class="older hidden"><button class="ghost" onclick="loadOlder()">↑ Load older messages</button></div>
         <div class="msgs" id="msgs"><div class="empty">Your conversations appear here as they sync.</div></div>
+        <form id="composer" class="composer hidden" onsubmit="return sendMsg(event)">
+          <input id="composer-input" type="text" placeholder="Send a message…" autocomplete="off">
+          <button class="primary" type="submit" id="composer-send">Send</button>
+        </form>
       </div>
     </div>
   </section>
