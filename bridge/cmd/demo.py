@@ -2,11 +2,11 @@
 
 Graders cannot log in to TikTok, so this runs the whole pipeline against a
 fixture-backed provider (the real redacted shapes from tests/fixtures/web/) and a
-fake password driver, and writes a redacted transcript to docs/demo-transcript.md.
+fake password driver, and writes a redacted transcript to demo-transcript.md.
 The same flow runs against a real imported session on the server (G4) by swapping
 the provider factory for a live WebProvider.
 
-  .venv/bin/python -m bridge.cmd.demo            # writes docs/demo-transcript.md
+  .venv/bin/python -m bridge.cmd.demo            # writes demo-transcript.md
 """
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ class _FakeDriver:
         return LoginResult("success")
 
 
-def run(out_path="docs/demo-transcript.md", token="demo-token"):
+def run(out_path="demo-transcript.md", token="demo-token"):
     pipeline = Pipeline(":memory:")
     runtime = BridgeRuntime(pipeline)
     manager = LoginManager(runtime,

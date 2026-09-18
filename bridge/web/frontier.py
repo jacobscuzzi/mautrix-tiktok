@@ -1,6 +1,6 @@
 """Decode inbound frontier (pbbp2) websocket frames into normalized message tuples.
 
-Frame envelope (confirmed live, see docs/observations/frontier-fields.md):
+Frame envelope (confirmed live, field notes below):
   1 seqid | 2 logid | 3 service | 4 method | 5 repeated header {1:key,2:value}
   6 encoding ("gzip"|"") | 8 payload (gunzip when field 6 == "gzip")
 
@@ -87,8 +87,7 @@ def _content_text(content):
 def _message_from_inner(m, header_msg_id):
     """Map one inner Message body -> normalized dict, or None.
 
-    Field numbers confirmed from a live capture (2026-09-18), see
-    docs/observations/frontier-fields.md:
+    Field numbers confirmed from a live capture; see DESIGN.md §0/§13:
       f1 conversation_id | f3 server_message_id | f4 create_time (microseconds) |
       f7 sender_id | f8 content JSON | f14 sender sec_uid.
     """

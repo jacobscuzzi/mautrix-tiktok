@@ -1,6 +1,6 @@
 """WebProvider: the web DM backend behind the MessageProvider seam.
 
-Turns the captured web shapes (docs/observations/tiktok-web-dm-2026-09-18.md) into
+Turns the captured web shapes (see DESIGN.md) into
 the same (items, next_cursor, has_more) contract the mobile IM and TikAPI providers
 satisfy, so `Syncer`/`SyncState`/`normalize`/`metrics` are reused unchanged.
 

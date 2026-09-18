@@ -3,8 +3,8 @@
 An unofficial TikTok DM bridge: a user logs in with their TikTok account and their
 conversations — contacts, profiles, threads, messages — are fetched on our backend
 and normalized into a mautrix-style pipeline. Python prototype. This README leads
-with how it breaks, because that is the job. Full design: `DESIGN.md`. The brief it
-answers: `docs/BRIEF.md`.
+with how it breaks, because that is the job. Full design and the whole process:
+`DESIGN.md`.
 
 ## The surface, in one paragraph
 
@@ -79,13 +79,11 @@ wrapper is `wrapper/`.
 
 ```bash
 .venv/bin/python -m unittest discover -s tests      # 197 tests (1 skipped if no browser)
-./scripts/demo.sh                                   # end-to-end API demo -> docs/demo-transcript.md
+./scripts/demo.sh                                   # end-to-end API demo (fixture-backed)
 ```
 
 The demo starts the API, logs in, syncs contacts/threads/messages into SQLite, and
-prints `/metrics` — fixture-backed so it reproduces with no TikTok login. A real run
-of it against the imported session is `docs/demo-transcript.md` (redacted); graders
-cannot log in to TikTok, so the transcript is the evidence.
+prints `/metrics` — fixture-backed so it reproduces with no TikTok login.
 
 ## How to reproduce the capture (gate G1)
 
@@ -94,12 +92,11 @@ cannot log in to TikTok, so the transcript is the evidence.
 ./run-web-capture.sh --mode manual --headful --user <name>
 # log in yourself, clear any challenge, have a second account send a DM, press Enter
 python scripts/redact-capture.py 'browser-data/<name>/capture-*.jsonl'   # -> tests/fixtures/web/
-python scripts/decode-frontier.py 'browser-data/<name>/capture-*.jsonl'  # -> frontier-fields.md
+python scripts/decode-frontier.py 'browser-data/<name>/capture-*.jsonl'  # decode the frontier frames
 ```
 
-The observation write-up is `docs/observations/tiktok-web-dm-2026-09-18.md`. On the
-server, import the laptop session with `scripts/export-session.py` and run the demo
-against it (gate G4 — done live: 19 contacts pulled read-only into SQLite).
+On a server, import a captured session with `scripts/export-session.py` and run the
+demo against it (done live: 19 contacts pulled read-only into SQLite).
 
 ## What is proven / not built
 
@@ -142,5 +139,4 @@ wrapper/             the tester UI: static/ (connect / chats / health) + a proxy
                      server; a client of the bridge API
 scripts/             redact-capture, decode-frontier, export-session, g4_live_sync, demo.sh
 tests/               unittest + fixtures/web/ + fake_platform.py
-docs/                DESIGN, BRIEF, observations/, notes/, DECISIONS, PROGRESS
 ```

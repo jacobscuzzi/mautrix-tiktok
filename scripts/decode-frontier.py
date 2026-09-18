@@ -11,7 +11,7 @@ protobuf ("pbbp2"). Each frame is a `Frame`:
   field 4  method
 
 This prints the field tree per frame, flags UTF-8 text runs in the payload, and
-writes a docs/observations/frontier-fields.md skeleton to fill in by hand.
+writes a frontier-fields.md skeleton to fill in by hand.
 """
 import base64
 import glob
@@ -90,13 +90,12 @@ def main(argv):
                 print("  text:", fr["text_runs"][:10])
 
     _write_skeleton(frames)
-    print("\nwrote docs/observations/frontier-fields.md")
+    print("\nwrote frontier-fields.md")
 
 
 def _write_skeleton(frames):
     methods_in = sorted({str(f.get("headers", {}).get("X-Method")) for f in frames["ws_in"]})
-    os.makedirs("docs/observations", exist_ok=True)
-    with open("docs/observations/frontier-fields.md", "w") as f:
+    with open("frontier-fields.md", "w") as f:
         f.write("# Frontier websocket (pbbp2) — decoded field map\n\n")
         f.write("Decoded from `browser-data/jakob` with `scripts/decode-frontier.py`. The\n"
                 "account inbox was **empty** at capture, so these frames are the subscribe\n"

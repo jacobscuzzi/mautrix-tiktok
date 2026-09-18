@@ -8,7 +8,7 @@ server-side. In exchange we take a paid vendor dependency and a polling-only
 inbound path.
 
 Confirmed from TikAPI's OpenAPI docs (2026-09-17, see
-docs/plans/2026-09-17-tikapi-evaluation.md):
+the TikAPI trade-off, DESIGN.md §1):
 
 - Base URL            https://api.tikapi.io   (sandbox https://sandbox.tikapi.io)
 - Auth headers        X-API-KEY (developer key) + X-ACCOUNT-KEY (per-user OAuth token)

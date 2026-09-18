@@ -11,4 +11,5 @@ state.json
 sessions/
 .chromium-libs/
 browser-data/
-*.claude/
+*.claude/demo-transcript.md
+frontier-fields.md

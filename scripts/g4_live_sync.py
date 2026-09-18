@@ -23,7 +23,6 @@ from bridge.web.page import PageClient, playwright_evaluator
 from bridge.web import session as websess
 from bridge.providers.web import WebProvider
 from bridge.pipeline import Pipeline
-from bridge.app import BridgeRuntime
 from bridge import errors
 
 MESSAGES_URL = "https://www.tiktok.com/messages"
@@ -101,7 +100,6 @@ def main():
 
         # read-only pull through the real provider
         pipe = Pipeline(a.db)
-        rt = BridgeRuntime(pipe)
         wp = WebProvider(pc, avatar_client=None)
         try:
             users, _, _ = wp.list_contacts()

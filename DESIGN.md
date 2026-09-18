@@ -336,7 +336,8 @@ egress stays a documented lever, not a build target.
 
 1. **Re-capture a non-empty inbox** (one real DM) to fill `messages_*` +
    `ws_inbound_dm`, pin the frontier message-body field numbers
-   (`frontier-fields.md`), and replace the synthetic message fixtures.
+   (the field notes in `bridge/web/frontier.py`), and replace the synthetic
+   message fixtures.
 2. **Enable web `send_text`** from a `--allow-send` capture: add the `send_text`
    fixture, implement, keep the never-blind-replay rule.
 3. **Ship the signing-oracle escalation**: one browser signs, `curl_cffi` HTTP
@@ -401,7 +402,7 @@ Go, or a Go bridgev2 connector, does not change it.**
 5. **A vendor send endpoint (buy, not build).** TikAPI exposes
    `POST /user/message/send`; the `TikApiProvider` seam already implements it. This
    trades the signing problem for a paid dependency, polling-only inbound, and an
-   explicit ToS decision (§ the TikAPI evaluation note) — acceptable as a fallback,
+   explicit ToS decision (the TikAPI trade-off, §1) — acceptable as a fallback,
    not as the default.
 
 **Recommended sequence.** Start with #1 for a working-but-supervised send in the
