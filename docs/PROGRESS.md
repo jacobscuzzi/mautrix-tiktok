@@ -49,7 +49,12 @@ shredded, recorded w/ timestamps.  6. API+pipeline demo-transcript exists.
 8. FINISH-HERE morning checklist; DECISIONS+PROGRESS current; CLAUDE.md -> brief.
 9. no secrets in history outside redacted fixtures; no browser-data tracked.
 
-STOP CONDITION: checklist complete. Morning gates (real password login, live DM,
-watched demo, push+tag) are in FINISH-HERE.md - they need Jakob.
+POST-RUN (2026-09-18): a live DM exchange was captured at a second G4 run; the
+frontier message parser was corrected against the real layout (was [Inf], now
+[Obs]) and extracts all 10 messages with correct sender attribution.
+ws_inbound_dm is now verified live. Tests: 185.
+
+STOP CONDITION: checklist complete. Remaining morning gate: real password login
+(G3) + push+tag - they need Jakob. See FINISH-HERE.md.
 NEXT: Task D (API + pipeline + SQLite + demo, and G4 live read-only import), then
 Task E (docs distill), F (iPhone assets).

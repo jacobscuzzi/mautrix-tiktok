@@ -11,9 +11,8 @@ from bridge.providers.web import WebProvider
 FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "web")
 
 
-def _frame(service, method, headers, body_fields, gzip_it=True):
-    inner = proto.encode_fields(body_fields)
-    payload = gzip.compress(inner) if gzip_it else inner
+def _frame(service, method, headers, body_bytes, gzip_it=True):
+    payload = gzip.compress(body_bytes) if gzip_it else body_bytes
     raw = bytearray(proto.encode_fields({1: 1, 3: service, 4: method}))
     for k, v in headers.items():
         raw += proto.encode_fields({5: proto.encode_fields({1: k.encode(), 2: v.encode()})})
@@ -21,36 +20,47 @@ def _frame(service, method, headers, body_fields, gzip_it=True):
     return bytes(raw)
 
 
+def _message_frame(conv, mid, ts_us, sender, content, headers=None):
+    # real layout (confirmed live): body f6 -> f500 -> f5 = Message{1 conv, 3 mid,
+    # 4 create_time(us), 7 sender, 8 content JSON}.
+    msg = proto.encode_fields({1: conv.encode(), 3: mid, 4: ts_us,
+                               7: sender, 8: content.encode()})
+    envelope = proto.encode_fields({2: conv.encode(), 5: msg})
+    body = proto.encode_fields({1: 500, 6: proto.encode_fields({500: envelope})})
+    return _frame(20032, 1, headers or {":x_frontier_msg_id": "msg_x"}, body)
+
+
 class TestFrontier(unittest.TestCase):
     def test_decode_envelope_and_headers(self):
         raw = _frame(20032, 1, {"X-Method": "PayloadRelatedMethod",
-                                ":x_frontier_msg_id": "msg_abc"}, {1: b"x"})
+                                ":x_frontier_msg_id": "msg_abc"}, proto.encode_fields({1: b"x"}))
         d = frontier.decode_frame(raw)
         self.assertEqual(d["service"], 20032)
         self.assertEqual(d["headers"]["X-Method"], "PayloadRelatedMethod")
         self.assertEqual(d["headers"]["x_frontier_msg_id"], "msg_abc")
 
     def test_sync_frame_yields_no_messages(self):
-        # a pure cursor entry (no nested field 7) -> nothing (real empty-inbox case)
-        body = {2: proto.encode_fields({1: 3, 4: 6983896500996660010})}
+        # a pure cursor entry (no f6/f500 message) -> nothing (empty-inbox case)
+        body = proto.encode_fields({1: 500, 2: proto.encode_fields({1: 3, 4: 6983896500996660010})})
         raw = _frame(20032, 1, {"X-Method": "PayloadRelatedMethod"}, body)
         self.assertEqual(list(frontier.messages_from_frame(raw)), [])
 
     def test_message_frame_yields_text(self):
-        # synthetic inner message: conv(1), sender(3), mid(4), ts(5), content(7)
-        inner = proto.encode_fields({1: b"0:1:900:901", 3: b"901", 4: b"7500000000000000009",
-                                     5: 1789707000000, 7: b'{"text":"hello dm"}'})
-        entry = proto.encode_fields({7: inner})
-        raw = _frame(20032, 1, {"X-Method": "PayloadRelatedMethod",
-                                ":x_frontier_msg_id": "msg_z"}, {2: entry})
+        raw = _message_frame("0:1:900:901", 7500000000000000009, 1789707000000000, 901,
+                             '{"aweType":0,"text":"hello dm"}',
+                             headers={":x_frontier_msg_id": "msg_z"})
         msgs = list(frontier.messages_from_frame(raw))
         self.assertEqual(len(msgs), 1)
         self.assertEqual(msgs[0]["server_message_id"], "7500000000000000009")
-        self.assertIn("hello dm", msgs[0]["content"])
+        self.assertEqual(msgs[0]["sender"], "901")
+        self.assertEqual(msgs[0]["content"], "hello dm")
+        self.assertEqual(msgs[0]["create_time"], 1789707000000)  # us -> ms
         self.assertEqual(msgs[0]["raw_ref"], "msg_z")
 
-    def test_unknown_method_dropped_not_raised(self):
-        raw = _frame(20032, 1, {"X-Method": "SomeOtherMethod"}, {2: b""})
+    def test_read_receipt_command_frame_skipped(self):
+        # a mark-read command carries command_type, not a DM
+        raw = _message_frame("0:1:900:901", 7500000000000000010, 1789707000000000, 901,
+                             '{"command_type":1,"read_index":123}')
         self.assertEqual(list(frontier.messages_from_frame(raw)), [])
 
     def test_garbage_frame_never_raises(self):
@@ -65,6 +75,39 @@ class TestFrontier(unittest.TestCase):
         # empty inbox -> the real frame carries no DM text
         self.assertEqual(list(frontier.messages_from_frame(raw)), [])
 
+    def test_ws_inbound_dm_fixture(self):
+        # the committed ws_inbound_dm fixture (real layout, neutral text) must parse
+        path = os.path.join(FIX, "ws_inbound_dm.json")
+        if not os.path.exists(path):
+            self.skipTest("no ws_inbound_dm fixture")
+        with open(path) as f:
+            ent = json.load(f)
+        msgs = list(frontier.messages_from_frame(base64.b64decode(ent["frame_b64"])))
+        self.assertEqual(len(msgs), 1)
+        self.assertTrue(msgs[0]["server_message_id"] and msgs[0]["sender"])
+        self.assertTrue(msgs[0]["content"])
+
+    def test_real_captured_dm_frames_if_present(self):
+        # decode the real (gitignored) G4 DM capture if it exists on this machine;
+        # proves the parser on live data without committing anyone's real messages.
+        import glob
+        caps = glob.glob("browser-data/*/capture-g4-*.jsonl")
+        if not caps:
+            self.skipTest("no live G4 capture present")
+        found = 0
+        for cap in caps:
+            with open(cap) as fh:
+                lines = fh.readlines()
+            for line in lines:
+                rec = json.loads(line)
+                if rec.get("kind") != "ws_in":
+                    continue
+                for m in frontier.messages_from_frame(base64.b64decode(rec["data_b64"])):
+                    found += 1
+                    self.assertTrue(m["server_message_id"])
+                    self.assertTrue(m["conversation_id"].count(":") >= 2)
+        self.assertGreater(found, 0, "expected at least one real DM in the G4 capture")
+
 
 class TestFrontierThroughProvider(unittest.TestCase):
     def test_provider_emits_and_flags_gap(self):
@@ -72,10 +115,11 @@ class TestFrontierThroughProvider(unittest.TestCase):
             def on_frame(self, cb):
                 self.cb = cb
         wp = WebProvider(P())
-        inner = proto.encode_fields({1: b"c1", 3: b"901", 4: b"m1", 5: 1, 7: b'{"text":"hi"}'})
-        raw = _frame(20032, 1, {":x_frontier_msg_id": "msg_1"}, {2: proto.encode_fields({7: inner})})
+        raw = _message_frame("0:1:c1a:c1b", 12345, 1789707000000000, 901,
+                             '{"aweType":0,"text":"hi"}', headers={":x_frontier_msg_id": "msg_1"})
         got = wp.on_frontier_frame(raw)
-        self.assertEqual(got[0]["server_message_id"], "m1")
+        self.assertEqual(got[0]["server_message_id"], "12345")
+        self.assertEqual(got[0]["content"], "hi")
 
     def test_reconcile_only_when_gap(self):
         class P:

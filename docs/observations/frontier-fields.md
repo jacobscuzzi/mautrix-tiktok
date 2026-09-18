@@ -1,10 +1,8 @@
 # Frontier websocket (pbbp2) — decoded field map
 
-Decoded from `browser-data/jakob` with `scripts/decode-frontier.py`. The
-account inbox was **empty** at capture, so these frames are the subscribe
-hello and the server's sync/cursor pushes — no DM message payload was
-captured. Field numbers below are `[Obs]` for the framing, `[Inf]` for the
-message-body layout (mirrored from the mobile IM SDK / webcast findings).
+Decoded from real captures with `scripts/decode-frontier.py`. The frame envelope is
+`[Obs]` from the first capture; the **message body is now `[Obs]` too**, confirmed
+from a live DM exchange captured at G4 on 2026-09-18 (a friend sent ~10 messages).
 
 ## Frame envelope [Obs]
 
@@ -12,31 +10,47 @@ message-body layout (mirrored from the mobile IM SDK / webcast findings).
 |---|---|
 | 1 | seqid |
 | 2 | logid (ns) |
-| 3 | service (33554513 IM, 20032 push) |
+| 3 | service (33554513 IM subscribe, 20032 push/message) |
 | 4 | method (2 = subscribe) |
 | 5 | repeated header map {1:key, 2:value} |
 | 6 | payload encoding ("gzip" \| "") |
-| 8 | payload (gunzip when field 6==gzip) |
+| 8 | payload (gunzip when field 6 == "gzip") |
 
-## Outbound subscribe/hello [Obs]
+Inbound message frames carry header `X-Method: PayloadRelatedMethod` (or none),
+`X-PSM: bytedance.bsync.cache_svr`, `x_frontier_msg_id`, `x_frontier_traceid`.
+`x_frontier_msg_id` + `server_message_id` is the dedup key.
 
-```
-{1: [{1: [2], 2: ['0'], 3: ['0000000000000000000'], 4: [1789707402245]}], 2: [{1: [3], 3: [0]}, {1: [3], 3: [1]}, {1: [3], 3: [2]}]}
-```
+## Message body [Obs] (confirmed live 2026-09-18)
 
-`body{1:{1:2, 2:device_id, 3:device_id, 4:ts}, 2:[repeated cursor {1:topic, 3:idx}]}` — the client subscribes to inbox topics with cursor positions.
-
-## Inbound headers seen
-
-X-Method values: PayloadRelatedMethod
-
-## Inbound payload (sync/cursor; DM body TODO) [Inf]
+Gunzipped body -> `f6 -> f500 (repeated envelope) -> f5 = Message`:
 
 ```
-{1: [{1: [2], 2: ['0'], 3: ['0000000000000000000'], 4: [1789707401601], 5: [0], 6: [''], 7: [0], 8: [0]}], 2: [{1: [3], 2: [0], 3: [1], 4: [6983896500996660050], 5: [0], 6: [0], 8: [1], 9: [0], 255: ['']}, {1: [3], 2: [0], 3: [1], 4: [6983896500996669982], 5: [0], 6: [0], 8: [1], 9: [0], 255: ['']}, {1: [3], 2: [0], 3: [1], 4: [6983896585927131662], 5: [0], 6: [0], 8: [1], 9: [0], 255: ['']}, {1: [3], 2: [1], 3: [1], 4: [740570539769349401], 5: [0], 6: [0], 8: [1], 9: [0], 255: ['']}, {1: [3], 2: [0], 3: [0], 4: [7686729937617864712], 5: [0], 6: [0], 7: [{1: [{1: [0]}], 2: [{1: [1], 2: [0], 3: ['']}], 3: [0], 4: [0], 5: [0], 6: [''], 7: [''], 255: [0]}, {1: [{1: [0]}], 2: [{1: [2], 2: [0], 3: ['']}], 3: [0], 4: [0], 5: [0], 6: [''], 7: [''], 255: [0]}, {1: [{1: [0]}], 2: [{1: [3], 2: [1], 3: ['']}], 3: [0], 4: [0], 5: [0], 6: [''], 7: [''], 255: [0]}, {1: [{1: [0]}], 2: [{1: [8], 2: [0], 3: ['']}], 3: [0], 4: [0], 5: [0], 6: [''], 7: [''], 255: [0]}, {1: [{1: [0]}], 2: [{1: [10], 2: [0], 3: ['']}], 3: [0], 4: [0], 5: [0], 6: [''], 7: [''], 255: [0]}, {1: [{1: [0]}], 2: [{1: [11], 2: [0], 3: ['']}], 3: [0], 4: [0], 5: [0], 6: [''], 7: [''], 255: [0]}, {1: [{1: [0]}], 2: [{1: [12], 2
+body
+  f1: 500                       (marker)
+  f6:
+    f500 (repeated):            one per delivered message
+      f2: conversation_id       "0:1:<uidA>:<uidB>"
+      f5: Message
+        f1: conversation_id     "0:1:<uidA>:<uidB>"
+        f2: conversation_type   (1 = 1:1 DM)
+        f3: server_message_id    <- dedup / ordering id
+        f4: create_time         microseconds (divide by 1000 for ms)
+        f7: sender_id           the actual sender's uid (self or peer)
+        f8: content             JSON string {"aweType":0,"text":"..."}
+        f9 (repeated): {f1:key, f2:value}  extended props
+                       (client_message_id, im_client_send_msg_time, is_stranger, ...)
+        f14: sender sec_uid
 ```
 
-**TODO once a real DM is captured:** the message payload rides one
-`X-Method: PayloadRelatedMethod` frame; decode its inner body to
-`(conversation_id, message_id, ts, sender_id, text)` and pin the field
-numbers here. `x_frontier_msg_id` (header) + message id = the dedup key.
+Notes:
+- **Text** is `json.loads(f8)["text"]`. `aweType` 0 = plain text; 700 = text with
+  effect; a sticker/share has no `text`.
+- A **read receipt / conversation command** rides the same shape but its `f8` is
+  `{"command_type":1,"read_index":...}` — parsed and **skipped**, not emitted.
+- **Sender attribution verified**: in the live capture, self-sent messages carried
+  `f7 = self uid` and the friend's carried `f7 = the friend's uid`, so `f7` is the
+  true sender, not just the peer.
+
+The parser is `bridge/web/frontier.py::messages_from_frame`; the committed
+`tests/fixtures/web/ws_inbound_dm.json` reproduces this layout with neutral text
+and pseudonymized ids (a friend's real messages stay only in the gitignored capture).

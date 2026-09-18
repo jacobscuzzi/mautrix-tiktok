@@ -23,9 +23,10 @@ the empty inbox overnight, not by the code, and are the first two morning items.
    / verification are all valid data). The ladder itself is proven against the fake
    platform (6 real-browser e2e); this is the one thing only a real account shows.
 
-2. **A live DM to fill the two gaps.** The inbox was empty all night, so
-   `messages_*` and `ws_inbound_dm` are synthetic-only. Have a friend send one DM,
-   then:
+2. **(DONE live 2026-09-18) A friend's DMs were captured over the frontier socket**
+   and decoded to text — `ws_inbound_dm` is now real and the frontier field numbers
+   are confirmed. The only remaining synthetic-only piece is the REST `messages_*`
+   conversation-list JSON (that surface was empty at capture). To refresh anytime:
    ```sh
    .venv/bin/python scripts/g4_live_sync.py --user jakob --watch 120
    python scripts/redact-capture.py 'browser-data/jakob/capture-*.jsonl'

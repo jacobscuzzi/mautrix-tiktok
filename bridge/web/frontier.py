@@ -12,6 +12,7 @@ debug and dropped, never raised. Dedup key = x_frontier_msg_id + message id.
 from __future__ import annotations
 
 import gzip
+import json
 import logging
 
 from .. import proto
@@ -64,34 +65,68 @@ def _first(d, idx):
     return v[0] if v else None
 
 
-def _message_from_inner(inner, header_msg_id):
-    """Map one inner message body -> normalized dict, or None if it has no id/text.
+def _content_text(content):
+    """Return the text of a DM content JSON, or None for a command / non-text.
 
-    [Inf] field numbers mirrored from the mobile IM SDK Message:
-      1 conversation_id/short | 2 sender/server_message_id | 4 create_time |
-      6 content (JSON string). Isolated so a live DM re-pins these in one place.
+    Content is a JSON string like {"aweType":0,"text":"hi"}. A read-receipt /
+    system frame carries {"command_type":1,...} and is not a message.
     """
-    m = inner if isinstance(inner, dict) else proto.decode_tree(inner)
+    if not isinstance(content, str) or not content:
+        return None, True
+    if '"command_type"' in content:
+        return None, False   # a conversation command (mark-read etc.), not a DM
+    try:
+        obj = json.loads(content)
+    except ValueError:
+        return content, True
+    if isinstance(obj, dict):
+        return obj.get("text"), True
+    return None, True
+
+
+def _message_from_inner(m, header_msg_id):
+    """Map one inner Message body -> normalized dict, or None.
+
+    Field numbers confirmed from a live capture (2026-09-18), see
+    docs/observations/frontier-fields.md:
+      f1 conversation_id | f3 server_message_id | f4 create_time (microseconds) |
+      f7 sender_id | f8 content JSON | f14 sender sec_uid.
+    """
     conv = _first(m, 1)
-    mid = _first(m, 4) or _first(m, 2)
-    sender = _first(m, 3) or _first(m, 2)
-    ts = _first(m, 5) or _first(m, 6)
-    content = _first(m, 7) or _first(m, 8)
-    text = content if isinstance(content, str) else None
+    mid = _first(m, 3)
+    ts_us = _first(m, 4)
+    sender = _first(m, 7)
+    content = _first(m, 8)
     if mid is None:
         return None
+    text, is_message = _content_text(content)
+    if not is_message:
+        return None            # command / read-receipt frame
+    ts_ms = int(ts_us // 1000) if isinstance(ts_us, int) else 0
     return {
         "conversation_id": str(conv) if conv is not None else "",
         "server_message_id": str(mid),
         "sender": str(sender) if sender is not None else "",
-        "create_time": int(ts) if isinstance(ts, int) else 0,
+        "create_time": ts_ms,
         "content": text or "",
         "raw_ref": header_msg_id,
     }
 
 
+def _messages_in_tree(tree):
+    """Walk body -> f6 -> f500 (repeated envelope) -> f5 (the Message)."""
+    for wrapper in tree.get(6, []):
+        if not isinstance(wrapper, dict):
+            continue
+        for env in wrapper.get(500, []):
+            if isinstance(env, dict):
+                msg = _first(env, 5)
+                if isinstance(msg, dict):
+                    yield msg
+
+
 def messages_from_frame(raw):
-    """Yield normalized message dicts from a frame. Empty for sync/heartbeat frames.
+    """Yield normalized message dicts from a frame. Empty for sync/receipt frames.
 
     Never raises on an unknown shape; logs at debug and yields nothing.
     """
@@ -100,11 +135,6 @@ def messages_from_frame(raw):
     except Exception as e:  # pragma: no cover - defensive
         log.debug("undecodable frontier frame: %s", e)
         return
-    method = frame["headers"].get("X-Method")
-    if method and method not in DM_METHODS:
-        log.debug("frontier method %s dropped", method)
-        return
-    msg_id = frame["headers"].get("x_frontier_msg_id")
     if not frame["body"]:
         return
     try:
@@ -112,17 +142,11 @@ def messages_from_frame(raw):
     except Exception as e:
         log.debug("frontier body decode failed: %s", e)
         return
-    # field 2 of the body is the repeated per-topic / per-message list.
-    for entry in tree.get(2, []):
-        if not isinstance(entry, dict):
-            continue
-        # a message rides field 7 (nested body) in the sync entries; a pure cursor
-        # entry has no field 7 -> yields nothing (sync/heartbeat).
-        payloads = entry.get(7) or []
-        for p in payloads:
-            msg = _message_from_inner(p, msg_id)
-            if msg and msg.get("content"):
-                yield msg
+    msg_id = frame["headers"].get("x_frontier_msg_id")
+    for m in _messages_in_tree(tree):
+        rec = _message_from_inner(m, msg_id)
+        if rec:
+            yield rec
 
 
 def dedup_key(frame_headers, message_id):

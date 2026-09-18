@@ -233,17 +233,19 @@ egress stays a documented lever, not a build target.
   headless browser loads TikTok + a scannable QR from a datacenter IP; a logged-in
   web capture of the DM surface; the in-page re-signing probe (**the page signs**);
   **G4: the captured session imported read-only, 19 real contacts pulled through
-  `WebProvider` into SQLite, frontier socket opened** (2026-09-18 08:23 CEST).
+  `WebProvider` into SQLite; then a live DM exchange (~10 messages) captured over
+  the frontier socket and decoded to text with correct self/peer sender attribution**
+  (2026-09-18).
 - **Verified against fixtures:** contacts/profile parsers (real redacted data);
   conversation/message parsers + cursor pagination + `Syncer` dedup (synthetic
   fixtures, empty live inbox); frontier decode; SchemaChange on a renamed field.
 - **Fake-platform only:** the full password ladder (session reuse across restart =
   zero logins, logged-out-elsewhere = one login, 2FA stops, wrong password not
   retried, locked = blocked) driven by a real headless browser.
-- **Not built:** the live web conversation-list JSON mirror (inbox was empty —
-  synthetic-tested); outbound send / mark-read over the web channel (no fixture,
-  allow-send was no); the Go mautrix appservice (mapping documented, §9); mobile
-  device registration (TTEncrypt unavailable).
+- **Not built:** the live web conversation-list JSON mirror (REST inbox was empty —
+  synthetic-tested; but the realtime message body IS captured live); outbound send /
+  mark-read over the web channel (no fixture, allow-send was no); the Go mautrix
+  appservice (mapping documented, §9); mobile device registration (TTEncrypt).
 
 ---
 

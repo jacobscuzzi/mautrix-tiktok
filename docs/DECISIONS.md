@@ -91,3 +91,19 @@ profile (channel chromium, headless). **Outcome: connected.**
   gitignored browser-data/ · overnight has no KMS/BRIDGE_MASTER_KEY and the
   plaintext alternative is worse; encryption-at-rest against disk theft is weaker
   this way but honest · production reads the key from env/KMS (seam already exists).
+
+## G4 follow-up — live DM captured, frontier parser corrected (2026-09-18)
+A friend sent ~10 DMs during a second `g4_live_sync.py --watch` run. The frames
+were saved (`browser-data/jakob/capture-g4-*.jsonl`, gitignored) and decoded: my
+`[Inf]` frontier message layout was wrong. Real layout, now pinned:
+`body f6 -> f500 -> f5 = Message{1 conversation_id, 3 server_message_id,
+4 create_time(microseconds), 7 sender_id, 8 content JSON}`; read-receipts carry
+`command_type` and are skipped. `frontier.py` rewritten to this; it extracts all 10
+messages with correct text and **correct self-vs-peer sender attribution** (self-sent
+messages carry `f7 = self uid`). `ws_inbound_dm` is now verified live.
+
+- 2026-09-18 · The committed `ws_inbound_dm.json` fixture uses the REAL frame layout
+  but NEUTRAL text + pseudonymized ids · the real messages are a friend's private
+  DMs (third-party PII); they stay only in the gitignored capture · a skipUnless test
+  (`test_real_captured_dm_frames_if_present`) proves the parser on the real frames
+  locally without committing them.

@@ -92,6 +92,15 @@
       "notes": "SYNTHETIC (not live): the captured inbox was empty, so this fixture is shaped by hand from the mobile IM message envelope + web content JSON, to test the WebProvider messages parser and cursor pagination. Replace with a live capture once a DM exists.",
       "file": "messages_synth.json",
       "synthetic": true
+    },
+    {
+      "kind": "ws_inbound_dm",
+      "url_pattern": "wss://im-ws.tiktok.com/ws/v2",
+      "method": "WS",
+      "captured_at": null,
+      "redacted": true,
+      "notes": "Real frontier DM frame LAYOUT (f6->f500->f5 Message{1 conv,3 mid,4 ts_us,7 sender,8 content}), confirmed live at G4 2026-09-18. Text + ids are neutral/pseudonymized here; a friend's real messages stay only in the gitignored capture.",
+      "file": "ws_inbound_dm.json"
     }
   ]
 }

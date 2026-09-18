@@ -37,15 +37,41 @@ def main():
     a = ap.parse_args()
     out = os.path.join("browser-data", a.user)
 
+    import base64
+    from bridge.web import frontier
     from playwright.sync_api import sync_playwright
     result = {"user": a.user, "started": time.strftime("%Y-%m-%d %H:%M:%S")}
     frames = {"in": 0}
+    # save every inbound frame so a real DM is never lost, and decode it live.
+    cap_path = os.path.join(out, f"capture-g4-{int(time.time())}.jsonl")
+    cap = open(cap_path, "a", encoding="utf-8")
+    dm_texts = []            # (conversation_id, sender, text) extracted live
+    richest = {"len": 0, "tree": None, "headers": None}
+
+    def _on_frame(ws_url, payload):
+        frames["in"] += 1
+        raw = payload if isinstance(payload, (bytes, bytearray)) else payload.encode()
+        cap.write(json.dumps({"kind": "ws_in", "url": ws_url,
+                              "data_b64": base64.b64encode(raw).decode(),
+                              "n": len(raw), "ts": time.time()}) + "\n")
+        cap.flush()
+        try:
+            dec = frontier.decode_frame(raw)
+            if dec["body"] and len(dec["body"]) > richest["len"]:
+                richest.update(len=len(dec["body"]), headers=dec["headers"],
+                               tree=str(__import__("bridge.proto", fromlist=["proto"])
+                                        .decode_tree(dec["body"]))[:2000])
+            for m in frontier.messages_from_frame(raw):
+                dm_texts.append((m["conversation_id"], m["sender"], m["content"]))
+        except Exception:
+            pass
+
     with sync_playwright() as p:
         ctx, channel = browserfac.launch_persistent(p, out, headless=True, channel="chromium")
         result["channel"] = channel
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
-        page.on("websocket", lambda ws: ws.on("framereceived",
-                lambda f: frames.__setitem__("in", frames["in"] + 1)))
+        page.on("websocket", lambda ws: ws.on(
+            "framereceived", lambda f: _on_frame(ws.url, f)))
         try:
             page.goto(MESSAGES_URL, wait_until="domcontentloaded", timeout=45000)
         except Exception as e:
@@ -84,9 +110,29 @@ def main():
                 pipe.upsert_user(a.user, u)
         except errors.BridgeError as e:
             result["contacts_error"] = f"{type(e).__name__}: {e}"
-        # hold the socket briefly for any inbound DM (gentle; none expected tonight)
-        time.sleep(min(a.watch, 90))
+        # hold the socket for any inbound DM; decode + ingest each as it arrives.
+        deadline = time.time() + a.watch
+        while time.time() < deadline:
+            page.wait_for_timeout(1000)
+            for conv, sender, text in dm_texts:
+                from bridge.normalize import Event
+                pipe.ingest_event(Event(message_id=f"{conv}:{sender}:{hash(text) & 0xffff}",
+                                        conversation_id=conv, sender_id=sender,
+                                        text=text, timestamp_ms=int(time.time() * 1000)),
+                                  a.user)
+            if dm_texts:
+                break
+        cap.close()
         result["frontier_frames_in"] = frames["in"]
+        result["dm_messages_decoded"] = len(dm_texts)
+        result["dm_samples"] = [{"conv": c, "sender": s, "text": t[:120]}
+                                for c, s, t in dm_texts[:5]]
+        result["capture_file"] = cap_path
+        if not dm_texts and richest["tree"]:
+            # no text extracted: dump the richest frame so the field numbers can be pinned
+            result["richest_frame_headers"] = {k: v[:40] for k, v in
+                                               (richest["headers"] or {}).items()}
+            result["richest_frame_tree"] = richest["tree"]
         result["outcome"] = "connected"
         result["finished"] = time.strftime("%Y-%m-%d %H:%M:%S")
         pipe.close()
