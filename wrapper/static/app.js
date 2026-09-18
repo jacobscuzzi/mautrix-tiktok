@@ -8,6 +8,23 @@ async function api(path, opts) {
   return r.json();
 }
 
+// transient bottom notification
+let TOAST_T = null;
+function toast(msg, kind) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = "toast show" + (kind ? " " + kind : "");
+  clearTimeout(TOAST_T);
+  TOAST_T = setTimeout(() => { t.className = "toast"; }, 1900);
+}
+
+// run an async action with a spinner on the button that triggered it
+async function busy(btn, fn) {
+  if (btn) btn.classList.add("busy");
+  try { return await fn(); }
+  finally { if (btn) btn.classList.remove("busy"); }
+}
+
 function show(view) {
   for (const v of ["connect", "chats", "health"]) {
     $("view-" + v).classList.toggle("hidden", v !== view);
@@ -82,6 +99,12 @@ function renderAccount(a) {
     <div class="u">@${a.handle || ""}</div></div>`;
 }
 
+// manual Refresh button: same sync, but with visible feedback
+async function refresh(btn) {
+  await busy(btn, async () => { await refreshChats(); });
+  toast("Up to date", "ok");
+}
+
 async function refreshChats() {
   if (!LOGIN_ID) return;
   const data = await api("/api/chats?login_id=" + LOGIN_ID);
@@ -141,10 +164,10 @@ async function sendMsg(ev) {
   } catch (e) { res = { ok: false, error: "send failed" }; }
   if (!res.ok) {
     input.value = text;                          // restore so it isn't lost
-    $("peer").setAttribute("title", res.error || "send failed");
-    alert("Could not send: " + (res.error || "unknown error"));
+    toast("Could not send: " + (res.error || "unknown error"), "bad");
   } else {
     await loadMessages(CUR_THREAD, { force: true, toBottom: true });  // show our message
+    toast("Sent", "ok");
   }
   $("composer").classList.remove("sending");
   input.focus();
@@ -166,6 +189,11 @@ async function loadOlder() {
   if (res.added > 0) {
     await loadMessages(CUR_THREAD, { force: true, keepScroll: true });
     box.scrollTop = box.scrollHeight - before;   // keep the same message in view
+    toast(`Loaded ${res.added} older message${res.added === 1 ? "" : "s"}`, "ok");
+  } else if (res.error) {
+    toast(res.error, "bad");
+  } else {
+    toast("No older messages", "ok");
   }
   older.classList.toggle("hidden", res.has_more === false);
   older.classList.remove("loading");
@@ -208,16 +236,20 @@ async function loadMessages(tid, opts) {
 function escapeHtml(s) { return (s || "").replace(/[&<>"]/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
-async function logout() {
+async function logout(btn) {
   if (POLL) { clearInterval(POLL); POLL = null; }
-  if (LOGIN_ID) await api("/api/logout", { method: "POST",
-    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ login_id: LOGIN_ID }) });
+  await busy(btn, async () => {
+    if (LOGIN_ID) await api("/api/logout", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ login_id: LOGIN_ID }) });
+  });
   LOGIN_ID = null; CUR_THREAD = null; SELF_UID = null;
   $("tab-chats").disabled = true;
   $("connect-actions").classList.remove("hidden");
   $("connect-status").classList.add("hidden");
+  $("composer").classList.add("hidden");
   $("acct").innerHTML = "";
   show("connect");
+  toast("Logged out and wiped", "ok");
 }
 
 /* ---- health ---- */

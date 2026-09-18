@@ -211,3 +211,14 @@ constants, test locals). Kept the mobile-IM and TikAPI providers on purpose: the
 documented build-vs-buy alternatives behind the MessageProvider seam and are unit-tested.
 README/CLAUDE layout rewritten to state clearly what ships (web) vs the documented
 alternatives. pyflakes clean; 198 tests still green.
+
+## Frontend: chat scroll + button feedback (2026-09-18)
+- Chat scroll was broken by the classic flexbox bug: `.msgs` (a flex child) had no
+  `min-height:0`, so it expanded to fit all messages and was clipped by the parent
+  instead of scrolling. Added `min-height:0` to `.messages` and `.msgs` (and
+  `.threads`); the chat height is now `min(560px,68vh)`. Verified headless: 60
+  messages scroll (scrollHeight 2844 > clientHeight 440).
+- Button feedback: a `toast()` notification + a `busy()` spinner state on buttons.
+  Refresh shows a spinner then "Up to date"; Load older toasts the count / "No older
+  messages"; Send toasts "Sent" (or the error, replacing the alert); Log out shows a
+  spinner then "Logged out and wiped". Global :hover/:active button styles added.

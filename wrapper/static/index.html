@@ -43,15 +43,15 @@
        border-radius:50%;animation:spin 1s linear infinite;display:inline-block}
   @keyframes spin{to{transform:rotate(360deg)}}
   /* chats */
-  .chat{display:grid;grid-template-columns:300px 1fr;gap:0;height:560px;
+  .chat{display:grid;grid-template-columns:300px 1fr;gap:0;height:min(560px,68vh);
         border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel)}
-  .threads{border-right:1px solid var(--line);overflow-y:auto}
+  .threads{border-right:1px solid var(--line);overflow-y:auto;min-height:0}
   .threads .row{display:flex;gap:10px;align-items:center;padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--line)}
   .threads .row:hover{background:var(--panel2)} .threads .row.active{background:var(--panel2)}
   .avatar{width:34px;height:34px;border-radius:50%;background:var(--panel2);object-fit:cover;flex:0 0 auto}
   .row .name{font-weight:600;font-size:14px} .row .sub{color:var(--muted);font-size:12px}
-  .messages{display:flex;flex-direction:column}
-  .msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
+  .messages{display:flex;flex-direction:column;min-height:0}
+  .msgs{flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
   .bubble{max-width:70%;padding:9px 13px;border-radius:14px;background:var(--panel2);align-self:flex-start;font-size:14px}
   .bubble.me{align-self:flex-end;background:linear-gradient(90deg,#1c6b68,#188f89);color:#eafffe}
   .bubble .who{font-size:11px;color:var(--muted);margin-bottom:2px}
@@ -81,6 +81,22 @@
   .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--bad),var(--warn),var(--ok))}
   code{background:var(--panel2);padding:1px 6px;border-radius:5px;font-size:13px}
   .hidden{display:none}
+  /* button feedback */
+  button{transition:transform .06s ease, opacity .15s ease, filter .15s ease}
+  button:hover{filter:brightness(1.08)}
+  button:active{transform:translateY(1px) scale(.985)}
+  button:disabled,button.busy{opacity:.55;pointer-events:none}
+  button.busy{position:relative;color:transparent!important}
+  button.busy::after{content:"";position:absolute;inset:0;margin:auto;width:15px;height:15px;
+    border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;
+    animation:spin .7s linear infinite}
+  /* toast */
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(12px);
+    background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:11px 18px;
+    border-radius:11px;opacity:0;pointer-events:none;z-index:60;font-size:14px;
+    box-shadow:0 8px 30px rgba(0,0,0,.45);transition:opacity .2s ease, transform .2s ease}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.ok{border-color:var(--ok)} .toast.bad{border-color:var(--bad)}
 </style>
 </head>
 <body>
@@ -133,8 +149,8 @@
   <section id="view-chats" class="hidden">
     <div class="card" style="display:flex;align-items:center;gap:16px">
       <div class="acct" id="acct"></div>
-      <button class="ghost" style="margin-left:auto" onclick="refreshChats()">Refresh</button>
-      <button class="ghost" onclick="logout()">Log out &amp; wipe</button>
+      <button class="ghost" style="margin-left:auto" onclick="refresh(this)">Refresh</button>
+      <button class="ghost" onclick="logout(this)">Log out &amp; wipe</button>
     </div>
     <div class="chat">
       <div class="threads" id="threads"></div>
@@ -177,6 +193,7 @@
     </div>
   </section>
 </main>
+<div id="toast" class="toast"></div>
 <script src="app.js"></script>
 </body>
 </html>
