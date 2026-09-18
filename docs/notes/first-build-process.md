@@ -301,3 +301,37 @@ seam so mobile / web-frontier / TikAPI are interchangeable backends.
   raw mobile registration from a datacenter.
 - Long-polling a QR is pointless (~100 s TTL). Coordinate the scan live, or run
   headful locally.
+
+---
+
+## 14. Phase: the web DM path, built from one real capture (2026-09-18, overnight)
+
+Ran unattended per `docs/BRIEF.md` §0.5 with a pre-supplied logged-in capture under
+`browser-data/jakob/` (empty inbox). What got built, and the dead-ends:
+
+- **Task A** — `bridge/cmd/capture.py` + `bridge/auth/browser.py` (stealth
+  persistent context; taps network + frontier WS with no page injection),
+  `scripts/redact-capture.py` (length-preserving pseudonymizer -> `tests/fixtures/web/`),
+  `scripts/decode-frontier.py`. The in-page probe in the capture **settled the crux**:
+  a stripped-URL `fetch` came back re-signed and 200, so the page is the signer
+  ([Obs], not [Guess]). Dead-end: the account inbox was empty, so `messages_*` and
+  `ws_inbound_dm` are documented gaps, not tool failures.
+- **Task B** — `bridge/web/{session,page,frontier}.py` + `providers/web.py`.
+  Contacts and profiles parse from real redacted fixtures; conversations/messages
+  from synthetic fixtures shaped from the real envelopes (empty inbox). `WebProvider`
+  drives the real `Syncer` with dedup (the interchangeability proof).
+- **Task C** — `web_password_login.py` ladder + `web_cookie_import.py` +
+  `tests/fake_platform.py`. Proven against the fake platform with a **real headless
+  browser** (6 e2e), never against the real account (§0.5 G3). Dead-end fixed: CSS
+  attribute selectors starting with a digit need quoting (`[data-e2e="2fa-input"]`).
+- **Task D** — `pipeline.py` (SQLite), `api.py` (stdlib http.server), `BridgeRuntime`,
+  metrics (headline + leading indicator + Prometheus), `demo.sh` -> `demo-transcript.md`.
+- **G4 (live)** — imported the captured session read-only and **pulled 19 real
+  contacts** through `WebProvider` into SQLite; frontier socket opened (1 sync frame,
+  no DM). Session encrypted into `session_store`; plaintext `storage_state.json`
+  shredded. The read path is proven end to end against a live session.
+- **Task F** — `bridge/web/inject/*.js` (WKWebView host assets, navigator untouched);
+  `needs_user` returns an app-renderable action degrading to the cookies flow.
+
+Suite: 183 tests (1 skipped when no browser / no SignerPy). Full status in
+`DESIGN.md` §11; running decisions in `docs/DECISIONS.md`.
