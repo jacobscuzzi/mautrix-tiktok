@@ -1,0 +1,9 @@
+{
+  "kind": "login_success",
+  "url_pattern": "/login",
+  "method": "GET",
+  "status": null,
+  "captured_at": 1789707469.373072,
+  "redacted": true,
+  "notes": "logged-in marker; sessionid cookie present (redacted)"
+}

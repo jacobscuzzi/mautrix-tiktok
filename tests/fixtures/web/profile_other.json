@@ -1,0 +1,81 @@
+{
+  "kind": "profile_other",
+  "url_pattern": "/tiktok/v1/im/user/profile/",
+  "method": "GET",
+  "status": 200,
+  "captured_at": 1789707682.4807858,
+  "redacted": true,
+  "notes": "",
+  "response": {
+    "extra": {
+      "fatal_item_ids": [],
+      "logid": "2026091805012030AA3383AC9156787579",
+      "now": 1789707680000
+    },
+    "log_pb": {
+      "impr_id": "2026091805012030AA3383AC9156787579"
+    },
+    "self_biz_info": {},
+    "status_code": 0,
+    "status_msg": "",
+    "users": [
+      {
+        "im_biz_info": {
+          "activity_status_setting": 5,
+          "camera_info": {
+            "feature_result": {
+              "status": 1
+            }
+          },
+          "user_b2c_account_info": {}
+        },
+        "im_user_profile": {
+          "avatars": {
+            "avatar_choice": 0,
+            "avatar_medium": {
+              "uri": "720x720/tos-no1a-avt-0068c001-no/8ee30bdb965c1eb294dafa35c5da71f2",
+              "url_list": [
+                "https://p16-common-sign.tiktokcdn-eu.com/tos-no1a-avt-0068c001-no/8ee30bdb965c1eb294dafa35c5da71f2~tplv-tiktokx-cropcenter:720:720.webp?dr=10399&refresh_token=REDACTED&x-expires=1790312400&x-signature=REDACTED&t=4d5b0474&ps=13740610&shp=a1d2006b&shcp=a1d2006b&idc=no1a",
+                "https://p19-common-sign.tiktokcdn-eu.com/tos-no1a-avt-0068c001-no/8ee30bdb965c1eb294dafa35c5da71f2~tplv-tiktokx-cropcenter:720:720.webp?dr=10399&refresh_token=REDACTED&x-expires=1790312400&x-signature=REDACTED&t=4d5b0474&ps=13740610&shp=a1d2006b&shcp=a1d2006b&idc=no1a",
+                "https://p16-common-sign.tiktokcdn-eu.com/tos-no1a-avt-0068c001-no/8ee30bdb965c1eb294dafa35c5da71f2~tplv-tiktokx-cropcenter:720:720.jpeg?dr=10399&refresh_token=REDACTED&x-expires=1790312400&x-signature=REDACTED&t=4d5b0474&ps=13740610&shp=a1d2006b&shcp=a1d2006b&idc=no1a"
+              ],
+              "url_prefix": null
+            },
+            "avatar_small": {
+              "uri": "168x168/tos-no1a-avt-0068c001-no/8ee30bdb965c1eb294dafa35c5da71f2",
+              "url_list": [
+                "https://p16-common-sign.tiktokcdn-eu.com/tos-no1a-avt-0068c001-no/8ee30bdb965c1eb294dafa35c5da71f2~tplv-tiktokx-cropcenter:168:168.webp?dr=10397&refresh_token=REDACTED&x-expires=1790312400&x-signature=REDACTED&t=4d5b0474&ps=13740610&shp=a1d2006b&shcp=a1d2006b&idc=no1a",
+                "https://p19-common-sign.tiktokcdn-eu.com/tos-no1a-avt-0068c001-no/8ee30bdb965c1eb294dafa35c5da71f2~tplv-tiktokx-cropcenter:168:168.webp?dr=10397&refresh_token=REDACTED&x-expires=1790312400&x-signature=REDACTED&t=4d5b0474&ps=13740610&shp=a1d2006b&shcp=a1d2006b&idc=no1a",
+                "https://p16-common-sign.tiktokcdn-eu.com/tos-no1a-avt-0068c001-no/8ee30bdb965c1eb294dafa35c5da71f2~tplv-tiktokx-cropcenter:168:168.jpeg?dr=10397&refresh_token=REDACTED&x-expires=1790312400&x-signature=REDACTED&t=4d5b0474&ps=13740610&shp=a1d2006b&shcp=a1d2006b&idc=no1a"
+              ],
+              "url_prefix": null
+            }
+          },
+          "block_info": {
+            "block": false,
+            "blocked_by": false
+          },
+          "deleted": 0,
+          "enterprise_verify_reason": "",
+          "follow_status": 0,
+          "follower_status": 0,
+          "maf_status": 2,
+          "nick_name": "Contact 458",
+          "signature": "",
+          "unique_id": "user_fake8",
+          "update_time": 1789707680659,
+          "user_id": 9999999999999990007,
+          "user_id_str": "9999999999999990007",
+          "user_verify_reason": "",
+          "user_verify_type": 0
+        },
+        "share_permission": {
+          "ttn_share_status": 0,
+          "update_time": 1789707680659,
+          "user_id": 9999999999999990007,
+          "user_share_status": 1
+        }
+      }
+    ]
+  }
+}

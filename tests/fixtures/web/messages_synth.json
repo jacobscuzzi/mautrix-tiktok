@@ -1,0 +1,26 @@
+{
+  "kind": "messages_synth",
+  "url_pattern": "/v1/message/get_message_by_conversation",
+  "method": "GET",
+  "status": 200,
+  "redacted": true,
+  "synthetic": true,
+  "notes": "SYNTHETIC (not live): the captured inbox was empty, so this fixture is shaped by hand from the mobile IM message envelope + web content JSON, to test the WebProvider messages parser and cursor pagination. Replace with a live capture once a DM exists.",
+  "response": {
+    "status_code": 0,
+    "messages": [
+      {"server_message_id": "7500000000000000001", "conversation_id": "0:1:9999990001:9999990002",
+       "sender": "9999990002", "create_time": 1789707000000, "message_type": 1,
+       "content": "{\"text\":\"hey, are we still on for tomorrow?\",\"aweType\":700}"},
+      {"server_message_id": "7500000000000000002", "conversation_id": "0:1:9999990001:9999990002",
+       "sender": "9999990001", "create_time": 1789707030000, "message_type": 1,
+       "content": "{\"text\":\"yep! bringing snacks\",\"aweType\":700}"},
+      {"server_message_id": "7500000000000000003", "conversation_id": "0:1:9999990001:9999990002",
+       "sender": "9999990002", "create_time": 1789707090000, "message_type": 7,
+       "content": "{\"text\":\"\",\"aweme\":{\"aweme_id\":\"733\"}}"}
+    ],
+    "has_more": 1,
+    "next_cursor": "1789707090000",
+    "min_cursor": "1789707000000"
+  }
+}

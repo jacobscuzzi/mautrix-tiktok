@@ -1,0 +1,97 @@
+{
+  "generated_from": "browser-data/jakob (empty inbox, 2026-09-18)",
+  "fixtures": [
+    {
+      "kind": "ws_outbound",
+      "url_pattern": "wss://im-ws.tiktok.com/ws/v2",
+      "method": "WS",
+      "captured_at": 1789707402.2491167,
+      "redacted": true,
+      "notes": "frontier subscribe/hello frame",
+      "file": "ws_outbound.json"
+    },
+    {
+      "kind": "ws_frontier_sync",
+      "url_pattern": "wss://im-ws.tiktok.com/ws/v2",
+      "method": "WS",
+      "captured_at": 1789707403.815544,
+      "redacted": true,
+      "notes": "frontier pbbp2 frame; sync/cursor only (empty inbox, no DM payload captured)",
+      "file": "ws_frontier_sync.json"
+    },
+    {
+      "kind": "login_success",
+      "url_pattern": "/login",
+      "method": "GET",
+      "captured_at": 1789707469.373072,
+      "redacted": true,
+      "notes": "logged-in marker; sessionid cookie present (redacted)",
+      "file": "login_success.json"
+    },
+    {
+      "kind": "conv_list",
+      "url_pattern": "/v2/message/get_by_user_init",
+      "method": "POST",
+      "captured_at": 1789707472.283254,
+      "redacted": true,
+      "notes": "protobuf body (im-api); ids pseudonymized",
+      "file": "conv_list.json"
+    },
+    {
+      "kind": "messages_page",
+      "url_pattern": "/v1/message/get_by_user_combo",
+      "method": "POST",
+      "captured_at": 1789707472.957929,
+      "redacted": true,
+      "notes": "protobuf body (im-api); ids pseudonymized",
+      "file": "messages_page.json"
+    },
+    {
+      "kind": "session_check",
+      "url_pattern": "/passport/token/beat/web/",
+      "method": "GET",
+      "captured_at": 1789707473.8113334,
+      "redacted": true,
+      "notes": "",
+      "file": "session_check.json"
+    },
+    {
+      "kind": "profile_other",
+      "url_pattern": "/tiktok/v1/im/user/profile/",
+      "method": "GET",
+      "captured_at": 1789707682.4807858,
+      "redacted": true,
+      "notes": "",
+      "file": "profile_other.json"
+    },
+    {
+      "kind": "contacts",
+      "url_pattern": "/api/im/spotlight/relation/",
+      "method": "GET",
+      "captured_at": 1789708327.1438906,
+      "redacted": true,
+      "notes": "",
+      "file": "contacts.json"
+    },
+    {
+      "kind": "conv_list_synth",
+      "url_pattern": "/v1/conversation/list",
+      "method": "GET",
+      "captured_at": null,
+      "redacted": true,
+      "notes": "SYNTHETIC: empty live inbox. Shaped from the IM conversation-list envelope to test the parser. inbox=[{conversation_id, conversation_short_id, ticket, participants, last_message}].",
+      "file": "conv_list_synth.json",
+      "synthetic": true
+    },
+    {
+      "kind": "messages_synth",
+      "url_pattern": "/v1/message/get_message_by_conversation",
+      "method": "GET",
+      "captured_at": null,
+      "redacted": true,
+      "notes": "SYNTHETIC (not live): the captured inbox was empty, so this fixture is shaped by hand from the mobile IM message envelope + web content JSON, to test the WebProvider messages parser and cursor pagination. Replace with a live capture once a DM exists.",
+      "file": "messages_synth.json",
+      "synthetic": true
+    }
+  ]
+}

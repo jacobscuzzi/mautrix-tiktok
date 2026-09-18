@@ -1,0 +1,22 @@
+{
+  "kind": "session_check",
+  "url_pattern": "/passport/token/beat/web/",
+  "method": "GET",
+  "status": 200,
+  "captured_at": 1789707473.8113334,
+  "redacted": true,
+  "notes": "",
+  "response": {
+    "data": {
+      "error_code": 0,
+      "error_name": "success",
+      "description": "",
+      "name": "success",
+      "log_id": "20260918045751F95EE072CEAC8D457C98",
+      "app_id": 1459,
+      "user_id_str": "9999999999999990001",
+      "session_expired_description": ""
+    },
+    "message": "success"
+  }
+}

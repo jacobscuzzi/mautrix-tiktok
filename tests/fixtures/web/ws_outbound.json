@@ -1,0 +1,10 @@
+{
+  "kind": "ws_outbound",
+  "url_pattern": "wss://im-ws.tiktok.com/ws/v2",
+  "method": "WS",
+  "status": null,
+  "captured_at": 1789707402.2491167,
+  "redacted": true,
+  "notes": "frontier subscribe/hello frame",
+  "frame_b64": "CJFOEIb4/paLNBjRgIAQIAI6ATJCNQohCAISATAaEzAwMDAwMDAwMDAwMDAwMDAwMDAghfj+los0EgQIAxgAEgQIAxgBEgQIAxgC"
+}

@@ -1,0 +1,22 @@
+{
+  "kind": "conv_list_synth",
+  "url_pattern": "/v1/conversation/list",
+  "method": "GET",
+  "status": 200,
+  "redacted": true,
+  "synthetic": true,
+  "notes": "SYNTHETIC: empty live inbox. Shaped from the IM conversation-list envelope to test the parser. inbox=[{conversation_id, conversation_short_id, ticket, participants, last_message}].",
+  "response": {
+    "status_code": 0,
+    "inbox": {
+      "conversations": [
+        {"conversation_id": "0:1:9999990001:9999990002", "conversation_short_id": "7500000000000000900",
+         "ticket": "TCK-REDACTED", "conversation_type": 1,
+         "participants": ["9999990001", "9999990002"],
+         "last_message": {"server_message_id": "7500000000000000003", "create_time": 1789707090000}}
+      ]
+    },
+    "has_more": 0,
+    "next_cursor": ""
+  }
+}
