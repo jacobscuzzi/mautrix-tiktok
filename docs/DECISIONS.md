@@ -222,3 +222,16 @@ alternatives. pyflakes clean; 198 tests still green.
   Refresh shows a spinner then "Up to date"; Load older toasts the count / "No older
   messages"; Send toasts "Sent" (or the error, replacing the alert); Log out shows a
   spinner then "Logged out and wiped". Global :hover/:active button styles added.
+
+## Send: fix delivery + display (2026-09-18)
+Reported: sent messages didn't arrive or show. Diagnosed live: the send actually
+WORKS (a marker landed on the server), and there is a send affordance the code
+missed -- an svg [data-e2e="dm-new-send-btn"] that appears after typing. The real
+problem was display: the sent message was never fetched back, and the frontier echo
+of one's own message isn't reliably immediate. Fix in LiveBridge._send: type ->
+Enter (send-button click as fallback if the composer isn't cleared) -> detect "sent"
+by the editor emptying -> then _fetch_recent() pulls the newest messages from the
+server (get_by_conversation, cursor=now) and ingests them, so the message shows at
+once with its real id (sender = self -> a "me" bubble). Never re-sends. Verified
+live: send -> ok, message appears in the chat. (Two test messages were sent to the
+test conversation during diagnosis/verification.)
