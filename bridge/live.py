@@ -57,7 +57,11 @@ class LiveLogin:
         self.authenticated = False
         self.headful_login = False
         self.init_bodies = []          # get_by_user_init protobuf bodies (backlog)
+        self.init_request = None        # decoded init request envelope (history template)
+        self.im_api_url = None          # a signed im-api URL to reuse for history
         self.known_users = set()
+        self.short_ids = {}            # conversation_id -> conversation_short_id
+        self.oldest_us = {}            # conversation_id -> oldest message ts (us)
         # worker-thread-only:
         self.ctx = None
         self.page = None
@@ -134,6 +138,29 @@ class LiveBridge:
     def logout(self, login_id):
         self._q.put(("logout", login_id))
 
+    def submit(self, fn, timeout=60):
+        """Run fn() on the browser worker thread and return its result."""
+        box = {}
+        done = threading.Event()
+
+        def job():
+            try:
+                box["r"] = fn()
+            except Exception as e:  # noqa: BLE001
+                box["e"] = e
+            finally:
+                done.set()
+        self._q.put(("call", job))
+        if not done.wait(timeout):
+            raise TimeoutError("browser worker busy")
+        if "e" in box:
+            raise box["e"]
+        return box.get("r")
+
+    def load_older(self, login_id, thread_id, count=30):
+        """Fetch one older page for a conversation (returns {added, has_more})."""
+        return self.submit(lambda: self._load_older(login_id, thread_id, count))
+
     def metrics_text(self):
         with self._lock:
             dicts = [l.metrics_dict() for l in self.logins.values()]
@@ -164,6 +191,8 @@ class LiveBridge:
                     self._do_open(arg)
                 elif cmd == "logout":
                     self._do_logout(arg)
+                elif cmd == "call":
+                    arg()
                 # periodic tick: detect logins, pump pages, sync
                 now = time.time()
                 if now - last_tick >= 1.0:
@@ -197,6 +226,16 @@ class LiveBridge:
         try:
             if "im-api.tiktok.com" in resp.url and "get_by_user_init" in resp.url:
                 login.init_bodies.append(resp.body())
+                if login.init_request is None:
+                    from . import proto
+                    req = resp.request.post_data_buffer
+                    if req:
+                        login.init_request = proto.decode_tree(req)
+                    # reuse this signed im-api URL, swapped to the history path
+                    login.im_api_url = resp.url.split("?", 1)[0].replace(
+                        "/v2/message/get_by_user_init",
+                        "/v1/message/get_by_conversation") + (
+                        "?" + resp.url.split("?", 1)[1] if "?" in resp.url else "")
         except Exception:
             pass
 
@@ -286,6 +325,35 @@ class LiveBridge:
                 self._ingest_message(login, m)
                 n += 1
         return n
+
+    def _load_older(self, login_id, thread_id, count):
+        login = self.logins.get(login_id)
+        if not login or not login.provider:
+            return {"added": 0, "has_more": False, "error": "not connected"}
+        short = login.short_ids.get(thread_id)
+        cursor = login.oldest_us.get(thread_id)
+        if cursor is None:
+            rows = self.pipeline.get_messages(thread_id, 0, limit=1)
+            cursor = (rows[0]["ts"] * 1000) if rows else int(time.time() * 1000000)
+        if not short:
+            return {"added": 0, "has_more": False, "error": "unknown conversation"}
+        from .web.page import playwright_pb_poster
+        login.provider.configure_history(
+            playwright_pb_poster(login.page), login.init_request, login.im_api_url)
+        try:
+            msgs, nxt, more = login.provider.get_older_messages(thread_id, short, cursor, count)
+        except errors.BridgeError as e:
+            return {"added": 0, "has_more": False, "error": str(e)}
+        added = 0
+        before = self.pipeline.get_messages(thread_id, 0, limit=100000)
+        have = {r["message_id"] for r in before}
+        for m in msgs:
+            if m["server_message_id"] not in have:
+                self._ingest_message(login, m)
+                added += 1
+        if nxt:
+            login.oldest_us[thread_id] = min(login.oldest_us.get(thread_id, nxt), nxt)
+        return {"added": added, "has_more": bool(more)}
 
     def _resolve_peers(self, login):
         """Give every conversation peer a name + avatar via the profile endpoint."""
@@ -396,6 +464,14 @@ class LiveBridge:
         ev = normalize.to_event(m)
         if not ev.message_id:
             return
+        # remember what we need to page history for this conversation
+        if m.get("conv_short_id"):
+            login.short_ids[ev.conversation_id] = m["conv_short_id"]
+        us = m.get("create_time_us") or (ev.timestamp_ms * 1000)
+        if us:
+            cur = login.oldest_us.get(ev.conversation_id)
+            if cur is None or us < cur:
+                login.oldest_us[ev.conversation_id] = us
         # make sure the thread exists so the chats view lists it
         self.pipeline.upsert_thread(login.login_id,
                                     normalize.to_thread({"conversation_id": ev.conversation_id,

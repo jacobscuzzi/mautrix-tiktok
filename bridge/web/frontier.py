@@ -95,6 +95,7 @@ def _message_from_inner(m, header_msg_id):
     conv = _first(m, 1)
     mid = _first(m, 3)
     ts_us = _first(m, 4)
+    short = _first(m, 5)       # conversation_short_id (needed to page history)
     sender = _first(m, 7)
     content = _first(m, 8)
     if mid is None:
@@ -108,9 +109,59 @@ def _message_from_inner(m, header_msg_id):
         "server_message_id": str(mid),
         "sender": str(sender) if sender is not None else "",
         "create_time": ts_ms,
+        "create_time_us": ts_us if isinstance(ts_us, int) else 0,
+        "conv_short_id": short if isinstance(short, int) else None,
         "content": text or "",
         "raw_ref": header_msg_id,
     }
+
+
+def _messages_in_block(tree, block_field):
+    """body -> f6 -> f<block_field> -> f1[] = Message (init uses 203, history 301)."""
+    for wrapper in tree.get(6, []):
+        if not isinstance(wrapper, dict):
+            continue
+        for block in wrapper.get(block_field, []):
+            if isinstance(block, dict):
+                for m in block.get(1, []):
+                    if isinstance(m, dict):
+                        rec = _message_from_inner(m, None)
+                        if rec:
+                            yield rec
+
+
+def messages_from_conversation_body(raw_body):
+    """Older messages from `POST im-api.../v1/message/get_by_conversation` (protobuf).
+
+    Layout confirmed live 2026-09-18: body -> f6 -> f301 -> f1[] = Message.
+    """
+    try:
+        tree = proto.decode_tree(raw_body)
+    except Exception as e:
+        log.debug("conversation body decode failed: %s", e)
+        return
+    yield from _messages_in_block(tree, 301)
+
+
+def conversation_cursor(raw_body):
+    """Return (next_cursor_us, has_more) from a get_by_conversation response.
+
+    The f301 block carries f2 = next cursor (oldest ts in this page, microseconds)
+    and f3 = has_more (1 = older pages remain).
+    """
+    try:
+        tree = proto.decode_tree(raw_body)
+    except Exception:
+        return None, False
+    for wrapper in tree.get(6, []):
+        if not isinstance(wrapper, dict):
+            continue
+        for block in wrapper.get(301, []):
+            if isinstance(block, dict):
+                nxt = (block.get(2) or [None])[0]
+                more = (block.get(3) or [0])[0]
+                return (nxt if isinstance(nxt, int) else None), bool(more)
+    return None, False
 
 
 def _messages_in_tree(tree):
@@ -168,14 +219,4 @@ def messages_from_init_body(raw_body):
     except Exception as e:
         log.debug("init body decode failed: %s", e)
         return
-    for wrapper in tree.get(6, []):
-        if not isinstance(wrapper, dict):
-            continue
-        for block in wrapper.get(203, []):
-            if not isinstance(block, dict):
-                continue
-            for m in block.get(1, []):
-                if isinstance(m, dict):
-                    rec = _message_from_inner(m, None)
-                    if rec:
-                        yield rec
+    yield from _messages_in_block(tree, 203)

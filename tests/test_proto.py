@@ -43,3 +43,17 @@ class TestProtoTree(unittest.TestCase):
         buf = proto.encode_fields({1: b"\x00\x01\x02\xff\xfe"})
         tree = proto.decode_tree(buf)
         self.assertIsInstance(tree[1][0], (bytes, str))
+
+
+class TestEncodeTree(unittest.TestCase):
+    def test_roundtrip_nested(self):
+        tree = {1: [301], 2: [10004],
+                8: [{301: [{1: ["0:1:1:2"], 2: [1], 3: [7686889546618028310],
+                            4: [1], 5: [1789743696583737], 6: [30]}]}],
+                15: [{1: ["aid"], 2: ["1988"]}]}
+        back = proto.decode_tree(proto.encode_tree(tree))
+        self.assertEqual(back[1][0], 301)
+        cmd = back[8][0][301][0]
+        self.assertEqual(cmd[1][0], "0:1:1:2")
+        self.assertEqual(cmd[3][0], 7686889546618028310)
+        self.assertEqual(cmd[6][0], 30)

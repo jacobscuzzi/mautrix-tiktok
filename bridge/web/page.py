@@ -99,6 +99,17 @@ FETCH_JS = """([method, url, body]) =>
               body: body || undefined})
     .then(r => r.text().then(t => [r.status, t]))"""
 
+# POST a raw protobuf body (base64 in/out) so the page (webmssdk) signs it.
+POST_PB_JS = """async ([url, b64]) => {
+  const bin = atob(b64); const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  const r = await fetch(url, {method: 'POST', credentials: 'include',
+    headers: {'content-type': 'application/x-protobuf'}, body: u8});
+  const b = new Uint8Array(await r.arrayBuffer()); let s = '';
+  for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  return [r.status, btoa(s)];
+}"""
+
 
 def playwright_evaluator(page):
     """Build an evaluator that runs the signed fetch inside a live Playwright page."""
@@ -106,3 +117,13 @@ def playwright_evaluator(page):
         status, text = page.evaluate(FETCH_JS, [method, url, body])
         return status, text
     return ev
+
+
+def playwright_pb_poster(page):
+    """A poster for raw-protobuf calls: (url, body_bytes) -> (status, resp_bytes)."""
+    import base64
+
+    def post(url, body_bytes):
+        status, b64 = page.evaluate(POST_PB_JS, [url, base64.b64encode(body_bytes).decode()])
+        return status, base64.b64decode(b64)
+    return post

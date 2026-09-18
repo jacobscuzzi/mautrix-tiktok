@@ -62,6 +62,11 @@ class StubLive:
         self.pipeline.wipe_login(lid)
         self._logins.pop(lid, None)
 
+    def load_older(self, lid, tid, count=30):
+        # stub: pretend one older message got added, no more history
+        self.pipeline.ingest_event(Event("m0", tid, "7072", "older one", 1), lid)
+        return {"added": 1, "has_more": False}
+
     def metrics_text(self):
         from bridge.metrics import render_prometheus
         import time
@@ -128,6 +133,13 @@ class TestWebapp(unittest.TestCase):
         self.assertIn("live_session_ratio", h)
         code, body = self._get("/metrics")
         self.assertIn(b"bridge_live_session_ratio", body)
+
+    def test_load_older_endpoint(self):
+        _, res = self._post("/api/connect")
+        lid = res["login_id"]
+        _, out = self._post("/api/load_older", {"login_id": lid, "thread_id": "0:1:42:7072"})
+        self.assertEqual(out["added"], 1)
+        self.assertIn("has_more", out)
 
     def test_logout_wipes(self):
         _, res = self._post("/api/connect")

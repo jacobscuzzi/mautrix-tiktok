@@ -82,6 +82,13 @@ class _Handler(BaseHTTPRequestHandler):
         if u.path == "/api/logout":
             self.live.logout(self._body().get("login_id", ""))
             return self._json(200, {"ok": True})
+        if u.path == "/api/load_older":
+            b = self._body()
+            try:
+                res = self.live.load_older(b.get("login_id", ""), b.get("thread_id", ""))
+            except Exception as e:  # noqa: BLE001
+                return self._json(200, {"added": 0, "has_more": False, "error": str(e)})
+            return self._json(200, res)
         return self._json(404, {"error": "not found"})
 
     def do_OPTIONS(self):

@@ -159,6 +159,35 @@ class WebProvider:
         self.avatars = avatar_client or AvatarClient()
         self._last_frontier_id = None
         self._gap = False
+        self._pb = None
+        self._tmpl = None
+        self._conv_url = None
+
+    def configure_history(self, pb_poster, init_request_tree, conv_url):
+        """Enable get_older_messages: a raw-protobuf poster, the captured request
+        envelope (from get_by_user_init), and the im-api conversation URL."""
+        self._pb = pb_poster
+        self._tmpl = init_request_tree
+        self._conv_url = conv_url
+
+    def get_older_messages(self, conv_id, short_id, before_cursor_us, count=30):
+        """One older page for a conversation via the in-page-signed protobuf call.
+        Returns (message_dicts, next_cursor_us, has_more)."""
+        from .. import proto
+        from ..web import frontier
+        if not (self._pb and self._tmpl and self._conv_url and short_id):
+            raise errors.NotSupported("history pagination not configured")
+        tree = {k: list(v) for k, v in self._tmpl.items()}
+        tree[1] = [301]
+        tree[2] = [10004]
+        tree[8] = [{301: [{1: [str(conv_id)], 2: [1], 3: [int(short_id)], 4: [1],
+                           5: [int(before_cursor_us)], 6: [int(count)]}]}]
+        status, resp = self._pb(self._conv_url, proto.encode_tree(tree))
+        if status != 200:
+            raise errors.Transient(f"get_by_conversation http {status}")
+        msgs = list(frontier.messages_from_conversation_body(resp))
+        nxt, more = frontier.conversation_cursor(resp)
+        return msgs, nxt, more
 
     # MessageProvider contract -------------------------------------------------
 

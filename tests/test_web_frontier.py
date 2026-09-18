@@ -169,3 +169,28 @@ class TestFrontierThroughProvider(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestConversationHistory(unittest.TestCase):
+    def _body(self, messages, next_cursor, has_more):
+        block = bytearray()
+        for conv, mid, ts_us, sender, content in messages:
+            block += proto.encode_fields({1: proto.encode_fields(
+                {1: conv.encode(), 3: mid, 4: ts_us, 5: 555, 7: sender, 8: content.encode()})})
+        inner = proto.encode_fields({1: bytes(block)})  # placeholder, rebuilt below
+        # f301 block: f1[] messages + f2 next_cursor + f3 has_more
+        blk = bytearray(block)
+        blk += proto.encode_fields({2: next_cursor, 3: int(has_more)})
+        return proto.encode_fields({6: proto.encode_fields({301: bytes(blk)})})
+
+    def test_parse_and_cursor(self):
+        body = self._body([
+            ("0:1:1:2", 10, 1789743696583737, 2, '{"aweType":0,"text":"old"}'),
+            ("0:1:1:2", 11, 1789743696598915, 1, '{"aweType":0,"text":"older"}'),
+        ], next_cursor=1789743600000000, has_more=1)
+        msgs = list(frontier.messages_from_conversation_body(body))
+        self.assertEqual([m["server_message_id"] for m in msgs], ["10", "11"])
+        self.assertEqual(msgs[0]["conv_short_id"], 555)
+        nxt, more = frontier.conversation_cursor(body)
+        self.assertEqual(nxt, 1789743600000000)
+        self.assertTrue(more)

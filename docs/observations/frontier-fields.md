@@ -77,3 +77,25 @@ body
 response on connect (`LiveBridge._capture_init` / `_ingest_init`) so existing chats
 render immediately. Peer names/avatars for non-followed contacts come from
 `GET /tiktok/v1/im/user/profile/?user_ids=["<uid>"]` (`WebProvider.get_profiles`).
+
+## Older history: get_by_conversation [Obs] (confirmed live 2026-09-18)
+
+Scrolling back further than the init backlog uses the page's history call
+`POST im-api.tiktok.com/v1/message/get_by_conversation` (protobuf), which the bridge
+replays through the in-page signer:
+
+```
+REQUEST  (same envelope as get_by_user_init; f1=301, f2=10004, f8=command)
+  f8 -> f301: f1 conversation_id | f2 conversation_type(1) |
+              f3 conversation_short_id (= message f5) | f4 1 |
+              f5 cursor (microseconds; return messages OLDER than this) | f6 count
+RESPONSE
+  f6 -> f301: f1[] Message (same shape) | f2 next_cursor (us) | f3 has_more (1/0)
+```
+
+Parsers: `frontier.messages_from_conversation_body` + `frontier.conversation_cursor`;
+the signed protobuf POST is `page.playwright_pb_poster`; `WebProvider.get_older_messages`
+builds the request via `proto.encode_tree` from the captured init template. Verified
+live: a conversation showing 5 backlog messages paged to 21 with one call (16 older,
+has_more=0). `LiveBridge.load_older` / API `POST /api/load_older` / the wrapper's
+"Load older" button drive it.

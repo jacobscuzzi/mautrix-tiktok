@@ -78,6 +78,31 @@ def _valid_message(buf):
     return i == n
 
 
+def encode_tree(tree):
+    """Encode a decode_tree()-shaped dict {field: [values]} back to protobuf bytes.
+
+    Inverse of decode_tree for the fields we build: nested dict -> length-delimited
+    message, str -> utf-8, int -> varint, bytes -> as-is. Field order follows dict
+    insertion order (which decode_fields preserves).
+    """
+    out = bytearray()
+    for field, values in tree.items():
+        for v in values:
+            if isinstance(v, bool):
+                out += _write_varint(field << 3) + _write_varint(int(v))
+            elif isinstance(v, int):
+                out += _write_varint(field << 3) + _write_varint(v)
+            else:
+                if isinstance(v, dict):
+                    b = encode_tree(v)
+                elif isinstance(v, str):
+                    b = v.encode("utf-8")
+                else:
+                    b = bytes(v)
+                out += _write_varint((field << 3) | 2) + _write_varint(len(b)) + b
+    return bytes(out)
+
+
 def decode_tree(buf, max_depth=6):
     # Recursively decode, treating a length-delimited field as a nested message
     # when it parses cleanly, else as a UTF-8 string, else raw bytes. This is the

@@ -113,13 +113,36 @@ function shortConv(id) { const p = (id || "").split(":"); return "chat " + (p[p.
 async function openThread(tid, name) {
   CUR_THREAD = tid;
   $("peer").textContent = name || "Conversation";
+  LAST_RENDER = "";                       // force a fresh render + scroll to bottom
+  $("older").classList.remove("hidden", "loading");   // offer "load older"
   document.querySelectorAll(".threads .row").forEach((r) => r.classList.remove("active"));
-  await loadMessages(tid);
+  await loadMessages(tid, { force: true, toBottom: true });
+}
+
+async function loadOlder() {
+  if (!CUR_THREAD) return;
+  const box = $("msgs");
+  const older = $("older");
+  older.classList.add("loading");
+  const before = box.scrollHeight;
+  let res;
+  try {
+    res = await api("/api/load_older", { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ login_id: LOGIN_ID, thread_id: CUR_THREAD }) });
+  } catch (e) { older.classList.remove("loading"); return; }
+  if (res.added > 0) {
+    await loadMessages(CUR_THREAD, { force: true, keepScroll: true });
+    box.scrollTop = box.scrollHeight - before;   // keep the same message in view
+  }
+  older.classList.toggle("hidden", res.has_more === false);
+  older.classList.remove("loading");
 }
 
 let LAST_RENDER = "";   // thread + last message id: skip re-render when nothing changed
 
-async function loadMessages(tid) {
+async function loadMessages(tid, opts) {
+  opts = opts || {};
   const msgs = await api(`/api/messages?login_id=${LOGIN_ID}&thread_id=${encodeURIComponent(tid)}`);
   const box = $("msgs");
   if (!msgs.length) {
@@ -128,9 +151,7 @@ async function loadMessages(tid) {
     return;
   }
   const sig = tid + ":" + msgs.length + ":" + msgs[msgs.length - 1].message_id;
-  if (sig === LAST_RENDER) return;              // unchanged: keep the user's scroll position
-  const switched = !LAST_RENDER.startsWith(tid + ":");
-  // stick to the bottom only if the user was already there (or just opened the thread)
+  if (sig === LAST_RENDER && !opts.force) return;   // unchanged: keep scroll position
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
   const prevTop = box.scrollTop;
   LAST_RENDER = sig;
@@ -147,8 +168,9 @@ async function loadMessages(tid) {
     }
     return `<div class="bubble ${me ? "me" : ""}">${who}${inner}</div>`;
   }).join("");
-  if (switched || atBottom) box.scrollTop = box.scrollHeight;   // newest at the bottom
-  else box.scrollTop = prevTop;                                  // user scrolled up: leave them
+  if (opts.keepScroll) box.scrollTop = prevTop;          // caller manages the scroll
+  else if (opts.toBottom || atBottom) box.scrollTop = box.scrollHeight;  // newest at bottom
+  else box.scrollTop = prevTop;                          // user scrolled up: leave them
 }
 
 function escapeHtml(s) { return (s || "").replace(/[&<>"]/g, (c) =>

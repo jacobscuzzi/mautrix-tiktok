@@ -146,3 +146,17 @@ UI shows a data-handling explainer before login. Non-browser plumbing is unit-te
 - Chat scroll: newest stays at the bottom; re-render only when messages changed; if
   the user scrolled up, their position is kept (no yank on the 5 s poll).
 - A sticker whose content is `{}` is labeled `[sticker]` instead of an empty bubble.
+
+## Load older messages (2026-09-18)
+Added on-demand history pagination. Probed live: scrolling up does not auto-fire a
+call once the backlog is loaded; the page uses `POST .../v1/message/get_by_conversation`
+(protobuf) with a microsecond cursor. Rather than depend on flaky programmatic-scroll
+triggering, the bridge replays that call directly through the in-page signer:
+`proto.encode_tree` builds the request from the captured get_by_user_init template
+(swap f1=301, f8=command{conv, short_id, cursor, count}); `page.playwright_pb_poster`
+POSTs raw protobuf so webmssdk signs it; the response decodes with
+`frontier.messages_from_conversation_body` + `conversation_cursor` (f2 next cursor,
+f3 has_more). `LiveBridge.load_older` (via a worker `submit`) ingests + dedups and
+advances the per-conversation cursor. API `POST /api/load_older`; the wrapper adds a
+"Load older" button that keeps scroll position. Verified live: 5 -> 21 messages in one
+call, has_more=0. conversation_short_id comes from message field 5.
