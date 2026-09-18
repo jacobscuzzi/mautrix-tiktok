@@ -338,8 +338,10 @@ class LiveBridge:
         if not cookies.get("sessionid"):
             if self._login_blocked(login.page):
                 self._fail(login, NEEDS_USER, RuntimeError(
-                    "TikTok is rate-limiting logins (max attempts). Wait ~15-60 min, "
-                    "then reconnect -- the saved session is reused with no new login."))
+                    "TikTok is rate-limiting logins (max attempts). Try 'Scan a QR "
+                    "code' (passwordless, usually not throttled), or wait ~15-60 min, "
+                    "or use a different throwaway account. Once you're in, the session "
+                    "is saved and reused -- don't log out & wipe."))
                 return
             login.page.wait_for_timeout(300)   # pump events
             return
