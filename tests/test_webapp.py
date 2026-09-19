@@ -157,6 +157,16 @@ class TestWebapp(unittest.TestCase):
         _, chats = self._get_json(f"/api/chats?login_id={lid}")
         self.assertEqual(chats["threads"], [])
 
+    def test_bridge_sets_no_cors_headers(self):
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.bport}/api/health") as r:
+            self.assertIsNone(r.headers.get("Access-Control-Allow-Origin"))
+
+    def test_bad_cursor_is_rejected(self):
+        _, res = self._post("/api/connect")
+        with self.assertRaises(urllib.error.HTTPError) as cm:
+            self._get(f"/api/messages?login_id={res['login_id']}&thread_id=x&cursor=abc")
+        self.assertEqual(cm.exception.code, 400)
+
     def _get_json(self, path):
         code, body = self._get(path)
         return code, json.loads(body)

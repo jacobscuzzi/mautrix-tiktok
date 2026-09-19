@@ -54,7 +54,8 @@ class TestFrontierDecode(unittest.TestCase):
         f = os.path.join(_HERE, "tests", "fixtures", "web", "ws_outbound.json")
         if not os.path.exists(f):
             self.skipTest("no ws fixture")
-        ent = json.load(open(f))
+        with open(f) as fh:
+            ent = json.load(fh)
         raw = base64.b64decode(ent["frame_b64"])
         d = decoder.decode_frame(raw)
         self.assertEqual(d["service"], [33554513])

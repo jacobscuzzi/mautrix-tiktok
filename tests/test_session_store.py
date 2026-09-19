@@ -31,5 +31,15 @@ class TestSessionStore(unittest.TestCase):
         with self.assertRaises(Exception):
             other.load("42")
 
+    def test_rejects_unsafe_login_id(self):
+        with self.assertRaises(ValueError):
+            self.store.save("../evil", {"sessionid": "abc"})
+
+    def test_blob_is_bound_to_its_login_id(self):
+        self.store.save("42", {"sessionid": "abc"})
+        os.rename(os.path.join(self.dir, "42.session"), os.path.join(self.dir, "43.session"))
+        with self.assertRaises(Exception):
+            self.store.load("43")
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,10 @@
+import collections
 import time
+
 from . import errors
+from . import metrics as _metrics
+from .state import SyncState
+from .sync import Syncer
 
 # The long-running sync driver for one login. It owns the poll cadence and the
 # failure-mode reactions: rate limits back off (they do not spin), a dead
@@ -47,10 +52,7 @@ class BridgeApp:
         return "stopped"
 
 
-# ---- multi-login runtime (Task D) -------------------------------------------
-from . import metrics as _metrics  # noqa: E402
-from .sync import Syncer  # noqa: E402
-from .state import SyncState  # noqa: E402
+# ---- multi-login runtime -----------------------------------------------------
 
 
 class LoginRecord:
@@ -74,10 +76,10 @@ class BridgeRuntime:
     def __init__(self, pipeline, poll_interval=30, clock=None):
         self.pipeline = pipeline
         self.poll_interval = poll_interval
-        self._clock = clock or (lambda: int(__import__("time").time() * 1000))
+        self._clock = clock or (lambda: int(time.time() * 1000))
         self.logins = {}
         self.error_totals = {}
-        self.lags = []
+        self.lags = collections.deque(maxlen=1000)   # recent delivery lags (s)
 
     def add_login(self, login_id, provider, source="web", password_login_used=False):
         rec = LoginRecord(login_id, provider, source, password_login_used)

@@ -1,7 +1,8 @@
 """The bridge program's HTTP face, backed by LiveBridge.
 
 This is the one bridge program the wrapper talks to. JSON API + Prometheus metrics;
-no UI here (the wrapper serves that). Endpoints:
+no UI here (the wrapper serves that). It binds to loopback and the wrapper reaches
+it through a server-side proxy, so it sets no CORS headers. Endpoints:
 
   POST /api/connect                 -> {login_id}
   GET  /api/status?login_id=        -> {state, account, last_error, ...}
@@ -15,6 +16,7 @@ no UI here (the wrapper serves that). Endpoints:
 from __future__ import annotations
 
 import json
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -31,7 +33,6 @@ class _Handler(BaseHTTPRequestHandler):
         body = json.dumps(obj).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -40,7 +41,6 @@ class _Handler(BaseHTTPRequestHandler):
         body = text.encode()
         self.send_response(code)
         self.send_header("Content-Type", "text/plain; version=0.0.4")
-        self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -71,7 +71,10 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(200, self.live.chats(lid))
         if u.path == "/api/messages":
             tid = (q.get("thread_id") or [""])[0]
-            cur = (q.get("cursor") or ["0"])[0]
+            try:
+                cur = int((q.get("cursor") or ["0"])[0] or 0)
+            except ValueError:
+                return self._json(400, {"error": "cursor must be an integer"})
             return self._json(200, self.live.messages(lid, tid, cur))
         return self._json(404, {"error": "not found"})
 
@@ -93,16 +96,9 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(200, res)
         return self._json(404, {"error": "not found"})
 
-    def do_OPTIONS(self):
-        self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.end_headers()
-
     def _health(self):
         dicts = [l.metrics_dict() for l in self.live.logins.values()]
-        now = int(__import__("time").time() * 1000)
+        now = int(time.time() * 1000)
         interval = self.live.poll_seconds * 1000
         return {
             "live_session_ratio": round(metrics.live_session_ratio(dicts, now, interval), 4),

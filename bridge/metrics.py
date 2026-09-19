@@ -7,10 +7,14 @@ def live_session_ratio(logins, now_ms, poll_interval_ms, grace=2.0):
                and now_ms - l.get("last_sync_ms", 0) <= threshold)
     return live / len(logins)
 
+REAUTH_STATES = ("needs-reauth", "needs_user")   # runtime and demo-app spellings
+
+
 def reauth_share(logins):
+    """Share of logins waiting for the user to log in again."""
     if not logins:
         return 0.0
-    return sum(1 for l in logins if l.get("state") == "needs-reauth") / len(logins)
+    return sum(1 for l in logins if l.get("state") in REAUTH_STATES) / len(logins)
 
 
 def password_login_share(logins):
@@ -54,7 +58,9 @@ def render_prometheus(logins, now_ms, poll_interval_ms, error_totals=None,
     g("bridge_delivery_lag_seconds", round(delivery_lag_p95(lags_seconds or []), 3),
       "p95 TikTok-ts to ingested_at lag")
     g("bridge_logins_total", len(logins), "total logins")
-    for state, n in sorted((error_totals or {}).items()):
+    if error_totals:
+        lines.append("# HELP bridge_error_total failures by resulting state")
         lines.append("# TYPE bridge_error_total counter")
-        lines.append(f'bridge_error_total{{state="{state}"}} {n}')
+        for state, n in sorted(error_totals.items()):
+            lines.append(f'bridge_error_total{{state="{state}"}} {n}')
     return "\n".join(lines) + "\n"

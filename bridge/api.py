@@ -13,11 +13,14 @@ to bridgev2 provisioning (`/_matrix/provision/v3/login/*`):
   GET    /metrics                   -> Prometheus text
 
 Login flows are delegated to a LoginManager with injected factories so the same
-code drives the fake platform (CI/demo) and a real browser (G4). The API never
-sees or stores a raw password beyond the single login step.
+code drives the fake platform (CI/demo) and a real browser. The API never sees or
+stores a raw password beyond the single login step. The demo app
+(bridge/cmd/serve.py) uses the simpler `webapp.py` + `LiveBridge`; this v1 API is
+what the demo transcript and the tests exercise.
 """
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import uuid
@@ -91,7 +94,7 @@ class LoginManager:
 
     @staticmethod
     def _action_for(out):
-        # what the app should render next (Task F): degrade to the cookies flow.
+        # what the app should render next: degrade to the cookies flow (DESIGN.md §10).
         if out.state == NEEDS_USER:
             return {"open_url": "https://www.tiktok.com/login", "then": "cookies",
                     "reason": out.reason}
@@ -112,7 +115,8 @@ class _Handler(BaseHTTPRequestHandler):
     def _authed(self):
         if not self.token:
             return True
-        return self.headers.get("Authorization") == f"Bearer {self.token}"
+        given = (self.headers.get("Authorization") or "").encode()
+        return hmac.compare_digest(given, f"Bearer {self.token}".encode())
 
     def _json(self, code, obj):
         body = json.dumps(obj).encode()

@@ -34,7 +34,13 @@ def decode_fields(buf):
             ln, i = read_varint(buf, i)
             v = buf[i:i + ln]
             i += ln
-        else:
+        elif wt == 5:                     # fixed32: keep the raw bytes
+            v = buf[i:i + 4]
+            i += 4
+        elif wt == 1:                     # fixed64: keep the raw bytes
+            v = buf[i:i + 8]
+            i += 8
+        else:                             # groups / invalid wire type: stop cleanly
             break
         fields.setdefault(field, []).append(v)
     return fields

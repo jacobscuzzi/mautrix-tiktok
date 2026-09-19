@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 import time
 
 SCHEMA = """
@@ -39,10 +40,21 @@ CREATE INDEX IF NOT EXISTS ix_events_thread ON events (thread_id, stream_order);
 """
 
 
+def _locked(fn):
+    """Serialize access to the shared connection: the browser worker writes while
+    HTTP handler threads read (check_same_thread=False alone is not enough)."""
+    def wrapper(self, *a, **kw):
+        with self._lock:
+            return fn(self, *a, **kw)
+    wrapper.__name__, wrapper.__doc__ = fn.__name__, fn.__doc__
+    return wrapper
+
+
 class Pipeline:
     def __init__(self, db_path=":memory:", webhook=None, source="web"):
         self.db = sqlite3.connect(db_path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
+        self._lock = threading.RLock()
         self.db.executescript(SCHEMA)
         self.source = source
         self._webhook = webhook          # callable(dict) -> None, may raise
@@ -51,6 +63,7 @@ class Pipeline:
 
     # ---- writes --------------------------------------------------------------
 
+    @_locked
     def upsert_login(self, login_id, source=None, state="connecting",
                      last_error=None, password_login_used=False):
         self.db.execute(
@@ -64,12 +77,14 @@ class Pipeline:
              int(bool(password_login_used)), int(time.time())))
         self.db.commit()
 
+    @_locked
     def set_login_state(self, login_id, state, last_error=None, last_sync_ts=None):
         self.db.execute(
             "UPDATE logins SET state=?, last_error=?, last_sync_ts=COALESCE(?, last_sync_ts) "
             "WHERE login_id=?", (state, last_error, last_sync_ts, login_id))
         self.db.commit()
 
+    @_locked
     def upsert_user(self, login_id, user):
         self.db.execute(
             """INSERT INTO users (user_id, login_id, handle, nickname, avatar_url, sec_uid)
@@ -82,6 +97,7 @@ class Pipeline:
              user.avatar_url, user.sec_uid))
         self.db.commit()
 
+    @_locked
     def upsert_thread(self, login_id, thread):
         self.db.execute(
             """INSERT INTO threads (thread_id, login_id, thread_type, last_ts, participants)
@@ -95,17 +111,19 @@ class Pipeline:
 
     def ingest_event(self, event, login_id="default"):
         """Idempotent upsert of one normalized Event. Returns True if newly inserted."""
-        cur = self.db.execute(
-            """INSERT OR IGNORE INTO events
-               (thread_id, message_id, login_id, sender_id, ts, stream_order, kind,
-                content, source, ingested_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (event.conversation_id, event.message_id, login_id, event.sender_id,
-             event.timestamp_ms, event.timestamp_ms, event.kind, event.text,
-             self.source, int(time.time() * 1000)))
-        self.db.commit()
-        if cur.rowcount:
-            self._fire_webhook(event, login_id)
+        with self._lock:
+            cur = self.db.execute(
+                """INSERT OR IGNORE INTO events
+                   (thread_id, message_id, login_id, sender_id, ts, stream_order, kind,
+                    content, source, ingested_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (event.conversation_id, event.message_id, login_id, event.sender_id,
+                 event.timestamp_ms, event.timestamp_ms, event.kind, event.text,
+                 self.source, int(time.time() * 1000)))
+            self.db.commit()
+            inserted = bool(cur.rowcount)
+        if inserted:
+            self._fire_webhook(event, login_id)   # outside the lock: may be slow
             return True
         return False
 
@@ -133,18 +151,21 @@ class Pipeline:
 
     # ---- reads ---------------------------------------------------------------
 
+    @_locked
     def list_threads(self, login_id):
         rows = self.db.execute(
             "SELECT thread_id, thread_type, last_ts, participants FROM threads "
             "WHERE login_id=? ORDER BY last_ts DESC", (login_id,)).fetchall()
         return [dict(r) for r in rows]
 
+    @_locked
     def list_contacts(self, login_id):
         rows = self.db.execute(
             "SELECT user_id, handle, nickname, avatar_url, sec_uid FROM users "
             "WHERE login_id=? ORDER BY nickname", (login_id,)).fetchall()
         return [dict(r) for r in rows]
 
+    @_locked
     def get_messages(self, thread_id, cursor=0, limit=50):
         rows = self.db.execute(
             "SELECT message_id, sender_id, ts, stream_order, kind, content FROM events "
@@ -152,6 +173,7 @@ class Pipeline:
             (thread_id, int(cursor or 0), limit)).fetchall()
         return [dict(r) for r in rows]
 
+    @_locked
     def last_events(self, n=5, login_id=None):
         if login_id:
             rows = self.db.execute(
@@ -162,14 +184,18 @@ class Pipeline:
                                    (n,)).fetchall()
         return [dict(r) for r in rows]
 
+    @_locked
     def logins(self):
         return [dict(r) for r in self.db.execute("SELECT * FROM logins").fetchall()]
 
+    @_locked
     def wipe_login(self, login_id):
         """Delete every row for one login -- data deletion on logout."""
+        # table names come from this fixed tuple, never from input
         for tbl in ("events", "threads", "users", "logins"):
             self.db.execute(f"DELETE FROM {tbl} WHERE login_id=?", (login_id,))
         self.db.commit()
 
+    @_locked
     def close(self):
         self.db.close()

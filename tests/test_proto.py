@@ -57,3 +57,14 @@ class TestEncodeTree(unittest.TestCase):
         self.assertEqual(cmd[1][0], "0:1:1:2")
         self.assertEqual(cmd[3][0], 7686889546618028310)
         self.assertEqual(cmd[6][0], 30)
+
+
+class TestFixedWidthFields(unittest.TestCase):
+    def test_fixed32_and_fixed64_do_not_truncate_later_fields(self):
+        buf = (bytes([(1 << 3) | 5]) + b"\x01\x02\x03\x04"      # field 1, fixed32
+               + bytes([(2 << 3) | 1]) + b"\x00" * 8              # field 2, fixed64
+               + proto.encode_fields({3: 7}))                     # field 3, varint
+        f = proto.decode_fields(buf)
+        self.assertEqual(f[1][0], b"\x01\x02\x03\x04")
+        self.assertEqual(len(f[2][0]), 8)
+        self.assertEqual(f[3][0], 7)
