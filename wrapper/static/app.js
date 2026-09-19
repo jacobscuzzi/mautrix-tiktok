@@ -74,7 +74,7 @@ function setStatus(state, err) {
   $("connect-hint").textContent =
     state === "waiting_login"
       ? (CONNECT_FLOW === "qr"
-          ? "A window opened with a QR code. Open TikTok on your phone → Profile → menu → Scan, and approve."
+          ? "Scan the QR code below with the TikTok app: Profile → menu → Scan, then approve."
           : "A real Chrome window opened on this machine. Your password goes only into TikTok's page.")
       : err || "";
 }

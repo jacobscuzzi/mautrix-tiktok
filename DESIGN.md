@@ -1,12 +1,12 @@
 # TikTok DM bridge — design
 
-Exercise 2, Knows case study. Goal: anyone logs in with their TikTok account and
-their conversations (contacts, profiles, threads, messages) are fetched on our
-backend and land in a mautrix-style pipeline. Judged on reasoning, failure modes,
-security, one health metric, and how far it gets — not production-readiness.
+Case study for Knows. Goal: anyone logs in with their TikTok account and their
+conversations (contacts, profiles, threads, messages) are fetched on our backend
+and land in a mautrix-style pipeline. Scope: reasoning, failure modes, security, one
+health metric, and how far a prototype gets — not production-readiness.
 
-Epistemics: **[Obs]** observed live, **[Inf]** inferred from a credible source,
-**[Guess]** unverified. What is proven versus assumed is listed in §11.
+**[Obs]** marks a claim observed live, **[Inf]** one inferred from a credible source
+(also used in code comments). What is proven versus assumed is listed in §11.
 
 ---
 
@@ -46,15 +46,17 @@ into safe fixtures, and every parser was written against them. The `WebProvider`
 plugs into the same `Syncer`/`normalize`/pipeline the mobile client would have used —
 the provider seam paid off.
 
-**Phase 4 — prove it live (G4).** The captured session was imported read-only and
+**Phase 4 — prove it live.** The captured session was imported read-only and
 pulled **19 real contacts** into SQLite, then a live DM exchange over the frontier
 socket was captured and decoded to text with correct self/peer attribution. Two
 things were learned only from real data: the frontier does **not** replay history on
 connect (the backlog comes from the page's own `get_by_user_init` protobuf), and the
-message field layout (`f6→f500/f203→f5`) — the earlier guess was wrong and only the
+message field layout (`f6→f500→f5` for frontier frames, `f6→f203→f1` for the init
+backlog) — the earlier guess was wrong and only the
 capture fixed it.
 
-**Phase 5 — a runnable demo app.** A `LiveBridge` (one Playwright worker per user) +
+**Phase 5 — a runnable demo app.** A `LiveBridge` (one Playwright worker; the demo
+runs a single login) +
 a stdlib HTTP API + a small web wrapper (connect / chats / health). This is where the
 gap between "works in a test" and "works for a person" showed up, and each fix taught
 something:
@@ -109,7 +111,7 @@ Two DM surfaces exist; we probed both live.
   handles acks/heartbeats. Playwright's native `page.on("websocket")` exposes every
   frame without injecting anything.
 
-**Cost, stated honestly:** one browser context per connected user while syncing.
+**Cost:** one browser context per connected user while syncing.
 Escalation levers, documented not built (§8): a shared "signing-oracle" browser +
 `curl_cffi` HTTP polling; driving the frontier socket directly (pbbp2 framing
 already decoded in `bridge/proto.py` + `bridge/web/frontier.py`).
@@ -121,7 +123,7 @@ web backend is `bridge/providers/web.py` (`WebProvider`). `Syncer`, `SyncState`,
 
 ---
 
-## 2. Architecture — six layers + a provider seam
+## 2. Architecture — six layers, one of them the provider seam
 
 ```
 auth/session -> [ MessageProvider ] -> sync/ingest -> normalize -> pipeline(SQLite) -> API
@@ -132,14 +134,15 @@ auth/session -> [ MessageProvider ] -> sync/ingest -> normalize -> pipeline(SQLi
 
 1. **auth/session** — login flows (password ladder, cookies import, QR), device
    identity per user (the persistent browser profile; `ttwid` minted once, never
-   rotated), `WebSession` <-> encrypted blob.
+   rotated), `WebSession` ↔ encrypted blob.
 2. **provider seam** (`bridge/provider.py`) — the build-vs-buy boundary. A
    `MessageProvider` is one login's `NetworkAPI`: `list_conversations`,
    `get_messages`, `list_contacts`, `get_profile`, `send_text`, `mark_read`,
    `subscribe`. `WebProvider`, native `IM`, and `TikApiProvider` are interchangeable.
-3. **sync/ingest** (`bridge/sync.py`) — backfill (cursor pagination) + poll with
-   gap reconciliation against stored watermarks; no message lost across a gap.
-4. **normalize** (`bridge/normalize.py`) — TikTok objects -> canonical `User`/
+3. **sync/ingest** (`bridge/sync.py`) — backfill (cursor pagination) + poll; dedup
+   by message id (in-memory set + the SQLite unique key), cursors are opaque and only
+   advance. After a socket gap the REST poll re-pulls through the same dedup.
+4. **normalize** (`bridge/normalize.py`) — TikTok objects → canonical `User`/
    `Thread`/`Event{kind}`. The bridgev2 boundary in miniature.
 5. **pipeline** (`bridge/pipeline.py`) — SQLite raw layer everything reads from:
    `logins`/`users`/`threads`/`events`, `stream_order` = ms ts, unique
@@ -153,17 +156,18 @@ unit-tested in isolation.
 
 ## 3. Login and session
 
-Three flows, one state machine (`bridge/auth/login.py`, `LOGIN_MODES`):
+Three web flows (plus the legacy `email`/`browser` modes of the mobile path), one
+state machine (`bridge/auth/login.py`, `LOGIN_MODES`):
 
 - **password** (bridgev2 `user_input`) — the ladder (`web_password_login.py`):
-  restore session -> `is_alive()` -> alive: done; else **exactly one** password
-  login into TikTok's own form -> success: persist; challenge (captcha/2FA/verify/
+  restore session → `is_alive()` → alive: done; else **exactly one** password
+  login into TikTok's own form → success: persist; challenge (captcha/2FA/verify/
   IDV): stop with `needs_user`, persist nothing new; wrong credentials:
   `bad_credentials`, no further automatic attempt; locked: `blocked`. Selectors are
   pinned from the capture in one dict with the verified date; a missing selector is
   `schema_change`, not a crash. **Never retry a challenge, never auto-loop.**
 - **cookies** (bridgev2 `cookies`) — `web_cookie_import.py`: import a session
-  captured elsewhere (laptop -> server, and the future iPhone path). Pins the
+  captured elsewhere (laptop → server, and the future iPhone path). Pins the
   backend context's UA/locale/timezone/viewport to what was reported and reuses the
   reported `ttwid`; a UA that contradicts an existing profile is refused with
   `fingerprint_mismatch`, never silently replaced.
@@ -171,72 +175,86 @@ Three flows, one state machine (`bridge/auth/login.py`, `LOGIN_MODES`):
 
 `is_alive()` is the cheapest logged-in call the capture shows:
 `GET /passport/token/beat/web/` (`error_code 0` = alive), with a `/messages` load
-+ `/login` 302 / `status_code 8` fallback. Password custody default is
-`store_password: false` — in memory for the single login, then dropped.
+and a `/login` 302 / `status_code 8` fallback. The raw password is never persisted:
+the v1 flow holds it in memory for the single login step; the demo app never
+receives it (the user types it into TikTok's own page).
 
 ---
 
 ## 4. How messages land
 
 `WebProvider` calls run inside the page (signed). `list_contacts` reads
-`/api/im/spotlight/relation/` (real: 18–19 followings with avatars); `get_profile`
+`/api/im/spotlight/relation/` (19 followings in the live pull; the redacted fixture
+holds 17); `get_profile`
 reads `/tiktok/v1/im/user/profile/`; conversations/messages read the `im-api`
 surface. Each response is parsed by an isolated parser that raises `SchemaChange`
 on a renamed/missing container. Realtime rides the frontier websocket: inbound
 pbbp2 frames are gunzipped (`frontier.py`) to `(conversation_id, message_id, ts,
 sender_id, text)`; unknown methods are dropped, never raised; `x_frontier_msg_id`
-+ message id is the dedup key. On any gap (reconnect, reload, id discontinuity) the
-provider triggers a REST reconcile through the `Syncer` dedup path. `Syncer` writes
+travels with each message as its raw reference and the message id is the dedup key.
+After a reconnect or reload the REST poll re-pulls through the `Syncer` dedup path.
+`Syncer` writes
 normalized events into the SQLite pipeline (idempotent on `(thread_id, message_id)`);
 the API reads from the pipeline. Avatars download through a jar-less,
-host-allowlisted client (`*.tiktokcdn.com`, `*.tiktokcdn-eu.com`), hashed by URL.
+host-allowlisted client (`*.tiktokcdn.com`, `*.tiktokcdn-eu.com`, `*.tiktokcdn-us.com`),
+hashed by URL.
 
 ---
 
-## 5. Failure modes (first — this is the job)
+## 5. Failure modes
 
 Detect at the right blast radius: **all users failing at once = our bug**
 (signer/browser/key); **one user failing = that account**. Never take an
 irreversible action on an ambiguous signal. Every row names the test or live
 observation that backs it.
 
-| Condition | Detection | State | Recovery | Backed by |
+| Condition | Detection | State / action | Recovery | Backed by |
 |---|---|---|---|---|
 | Password wrong | `login-error` element | `bad_credentials` | user retries; never auto-retried | ladder unit + e2e |
-| Challenge (captcha/2FA/IDV) | challenge element / `/verify` | `needs_user` + action | app opens URL -> cookies flow | ladder + api tests |
+| Challenge (captcha / 2FA / identity verification) | challenge element / `/verify` | `needs_user` + action | app opens URL → cookies flow | ladder + api tests |
 | Session expired / logged out elsewhere | `token/beat` code 8, `/login` 302 | `needs_user` | one re-login, no auto-loop | e2e logged-out-elsewhere; is_alive tests |
 | Rate limited | HTTP 429 / body code 7 | `rate_limited` | backoff + jitter; do not spin | PageClient + runtime tests |
 | Account locked/banned | `account-locked` / HTTP 403 | `blocked` | user action | ladder e2e; PageClient 403 |
-| Region mismatch (TTP cluster vs egress) | `vregion` (EU-TTP2) vs proxy region | `needs_user`/empty | geo-match the proxy to the account | observation (region DE/EU-TTP2) |
-| Frontier socket drop / gap | id discontinuity / close | reconcile | REST reconcile via Syncer dedup | frontier reconcile test |
+| Region mismatch (account's data-center cluster vs egress) | `tt-target-idc` / `store-idc` cookies vs proxy region | `needs_user`/empty | geo-match the proxy to the account | live observation (EU-TTP2 cluster); cookies kept in `WebSession` |
+| Frontier socket drop | websocket close / stale poll | reconcile | the periodic REST poll re-pulls via Syncer dedup | frontier reconcile test |
 | Page reload loses signer state | reload re-runs webmssdk | reconnect | reload `/messages`, re-subscribe | design ([Obs] page is signer) |
 | TikTok DOM/schema change | missing selector / renamed field | `schema_change` | one selector/parser module to fix | `SchemaChange` parser test |
 | Signer/browser stale for ALL users | cross-user 4xx spike (canary) | alert | hot-swap the browser/signer image | metric design (canary) |
-| Proxy dead | transport error | `transient` | stable per-user failover, not IP cycling | proxy pool (existing) |
+| Proxy dead | transport error | `transient` | stable per-user failover, not IP cycling | proxy pool test (mobile client only; the browser takes no proxy yet) |
 | Double login race | one action per user | serialize | per-user queue | invariant |
 | Avatar CDN URL expired | 403 on download | refresh | re-fetch signed URL on download | avatar allowlist test |
 | Ambiguous send | no confirmed server id | pending | never blind-replay; reconcile next fetch | invariant; send NotSupported here |
 | Fingerprint mismatch on import | UA vs stored profile | `fingerprint_mismatch` | refuse; never rotate identity | cookie-import test |
 
+States are those of the v1 runtime (`bridge/app.py`) and the login ladder; the demo
+app collapses non-recoverable cases into `needs_user` / `error` and counts recoverable
+provider errors (`schema_change`, `transient`) without dropping the login.
+
 ---
 
 ## 6. Security (concrete)
 
-The raw password is never persisted (default `store_password: false`) and ideally
-never received (QR); the browser flow types it into TikTok's own page. Persisted is
-the session blob + fingerprint, **envelope-encrypted at rest** (`session_store.py`):
-a per-user AES-GCM data key encrypts the blob, a master key (env `BRIDGE_MASTER_KEY`
-/ KMS seam) wraps the data key. If a custody mode stores the password it uses a
-separate per-user data key — custody shrinks the exposure window, it does not close
-it; session-only is strictly better where it works. Contact/message content is
-third-party PII: encrypted at rest, deleted on logout (`SessionStore.delete`,
-`DELETE /v1/logins/{id}`). Secrets come from env/KMS at deploy, never the repo; logs
-redact values (a grep test asserts the ladder never logs the password). The cookie
-jar is scoped to TikTok hosts; avatars download through a jar-less, host-allowlisted
-client. The raw capture and the plaintext `storage_state.json` are gitignored and
-shredded after a verified import (done live at G4); a length-preserving redactor
-(`scripts/redact-capture.py`) strips cookies/`msToken`/`sessionid`/`ttwid`/`verifyFp`
-+ email and pseudonymizes ids/handles/names before anything reaches the fixtures.
+The raw password is never persisted and ideally never received (QR); the browser
+flow types it into TikTok's own page, and the demo app's API never carries it.
+Persisted is the session blob + fingerprint, **envelope-encrypted at rest**
+(`session_store.py`): a per-login AES-GCM data key encrypts the blob, a master key
+(env `BRIDGE_MASTER_KEY` / KMS seam) wraps the data key, and the login id is bound as
+associated data so blobs cannot be swapped between logins. Without a master key the
+demo uses an ephemeral one and says so; the blob is then an export format, not a
+restart mechanism. What the demo actually reuses across restarts is the Chromium
+profile directory, and the SQLite cache of contacts/messages is plaintext — both are
+protected by file permissions only, both are deleted on logout (`POST /api/logout`
+in the app, `DELETE /v1/logins/{id}` in the v1 API). Contact/message content is
+third-party PII and is treated as such: never in the repo, gone on logout. Secrets
+come from env/KMS at deploy, never the repo; a unit test asserts the ladder never logs
+the password. The cookie jar is scoped to TikTok hosts; avatars download through a
+jar-less, host-allowlisted client. The raw capture and the plaintext
+`storage_state.json` are gitignored and deleted after a verified import; the redactor
+(`scripts/redact-capture.py`) blanks cookies / `msToken` / `sessionid` / `ttwid` /
+`verifyFp` / `device_id` / emails, also inside protobuf and websocket bodies, and
+pseudonymizes ids, handles, names and avatar object hashes with stable same-width
+fakes before anything reaches the fixtures — a test decodes every committed body to
+check that.
 
 ---
 
@@ -247,7 +265,7 @@ failure mode collapses into a drop here. **Leading indicator —
 `bridge_password_login_share`**: the share of connects that needed a password
 login; rising means sessions are dying early, which precedes challenges and bans,
 so it moves before the headline does. Also `bridge_delivery_lag_seconds` p95
-(TikTok ts -> `ingested_at`) to catch silent polling lag, and
+(TikTok ts → `ingested_at`) to catch silent polling lag, and
 `bridge_error_total{state}`. Exposed as Prometheus text at `GET /metrics`. Alert on
 a sudden headline drop (signer/browser outage, all users) and on a rising password-
 login share (credential churn).
@@ -259,12 +277,17 @@ login share (credential churn).
 Automating a user's own account with consent is what every messaging bridge does;
 it can still breach TikTok's terms and get an account restricted, so login, status,
 and delete are first-class. We do **not** add captcha solving, IP rotation, or
-fingerprint randomisation — those are detection evasion and out of scope. The
+fingerprint randomization — those are detection evasion and out of scope. The
 legitimate levers, in order: **per-user residential proxy** geo-matched to the
-account (`proxy.py`, stable per-login, no IP cycling) -> **a shared signing-oracle
+account (`proxy.py`, stable per-login, no IP cycling) → **a shared signing-oracle
 browser** (one browser signs, plain `curl_cffi` HTTP polling per user, far cheaper
-than a browser each) -> **edge egress** matching the account's region. One stable
-device/browser identity per user, never rotated (rotation reads as takeover).
+than a browser each) → **edge egress** matching the account's region. One stable
+device/browser identity per user, never rotated (rotation reads as takeover). The
+only automation tell removed is Chromium's `AutomationControlled` flag and banner — a
+fixed Playwright setting, not fingerprint randomization; UA, locale and timezone are
+pinned to what the user's own capture reported. `proxy.py` is wired into the mobile
+client only; the browser context does not take a proxy yet — a documented lever, not
+built for the web path.
 
 ---
 
@@ -284,15 +307,16 @@ device/browser identity per user, never rotated (rotation reads as takeover).
 
 ---
 
-## 10. iPhone client path (Task F)
+## 10. iPhone client path
 
-The bridge stays on the backend; an iOS app is a client of the §"API" the same way
+The bridge stays on the backend; an iOS app is a client of the bridge HTTP API
+(`bridge/api.py`) the same way
 Knows' apps are clients of its mautrix fork. iOS cannot run a long-lived background
 sync (Background App Refresh is throttled, no persistent sockets), so on-device
 ingest is not a goal. The **cookies flow is the phone's login path**: password
-relay -> on `needs_user` the API returns `{action:{open_url, then:"cookies"}}` ->
-the app opens TikTok's page in a `WKWebView` -> the user solves the challenge ->
-the app reads `WKHTTPCookieStore` -> `cookies` step -> connected. The injected
+relay → on `needs_user` the API returns `{action:{open_url, then:"cookies"}}` ->
+the app opens TikTok's page in a `WKWebView` → the user solves the challenge ->
+the app reads `WKHTTPCookieStore` → `cookies` step → connected. The injected
 assets (`bridge/web/inject/{request,ws_hook,fetch_tap}.js`) are standalone, post
 through one `postToHost(kind, payload)` (server: `expose_binding`; iOS:
 `WKUserScript` at `.atDocumentStart` + `WKScriptMessageHandler`), and never touch
@@ -306,14 +330,14 @@ egress stays a documented lever, not a build target.
 ## 11. What is proven, and what is not
 
 - **Runnable demo:** `./bridge-app.sh` starts the bridge (`bridge/live.py` — one
-  Playwright worker per user) + the `wrapper/` tester UI (connect → chats → health).
-  Real TikTok login in a local browser; the account's chats render and DMs stream
-  in live; sessions are envelope-encrypted and wiped on logout.
-
+  Playwright worker, a single login in the demo) + the `wrapper/` tester UI (connect
+  → chats → health). Real TikTok login in a local browser; the account's chats render
+  and DMs stream in live; the session blob is sealed at rest and everything is wiped
+  on logout.
 - **Verified live:** mobile signing accepted by TikTok (blocked only by IP); a
   headless browser loads TikTok + a scannable QR from a datacenter IP; a logged-in
   web capture of the DM surface; the in-page re-signing probe (**the page signs**);
-  **G4: the captured session imported read-only, 19 real contacts pulled through
+  **the captured session imported read-only, 19 real contacts pulled through
   `WebProvider` into SQLite; then a live DM exchange (~10 messages) captured over
   the frontier socket and decoded to text with correct self/peer sender attribution**
   (2026-09-18).
@@ -327,19 +351,18 @@ egress stays a documented lever, not a build target.
   synthetic-tested; but the realtime message body IS captured live); outbound send /
   mark-read (the web DM send is a signed WebSocket frame built by TikTok's own
   page JS, so there is no request to replay; sending would mean driving the live
-  composer in the browser -- too fragile to ship, so it is read-only); the Go mautrix
+  composer in the browser — too fragile to ship, so it is read-only); the Go mautrix
   appservice (mapping documented, §9); mobile device registration (TTEncrypt).
 
 ---
 
-## 12. Monday plan — the first five tickets
+## 12. Next steps — the first five tickets
 
-1. **Re-capture a non-empty inbox** (one real DM) to fill `messages_*` +
-   `ws_inbound_dm`, pin the frontier message-body field numbers
-   (the field notes in `bridge/web/frontier.py`), and replace the synthetic
-   message fixtures.
-2. **Enable web `send_text`** from a `--allow-send` capture: add the `send_text`
-   fixture, implement, keep the never-blind-replay rule.
+1. **Replace the synthetic message fixtures** (`messages_synth`, `conv_list_synth`)
+   with redacted ones from a non-empty inbox; the frontier message layout is already
+   pinned in `bridge/web/frontier.py`.
+2. **Sending, behind a flag:** §13 option 1 (hardened browser-in-the-loop) with the
+   never-blind-replay rule; a capture of one real send pins the frame layout.
 3. **Ship the signing-oracle escalation**: one browser signs, `curl_cffi` HTTP
    polling per user, to drop the browser-per-user cost.
 4. **Per-user residential proxy wiring end to end** with region matching to the
@@ -358,12 +381,13 @@ specific, not a matter of effort or language.
 could be signed and replayed. It goes out as a **length-delimited protobuf ("pbbp2")
 frame over the frontier WebSocket** (`wss://im-ws.tiktok.com/ws/v2`), and that frame
 is signed by TikTok's own `webmssdk` in the page (`frontierSign` / `registerWsSigner`,
-the same SDK that mints the socket's `access_key`). Confirmed: when the composer
+the same SDK that mints the socket's `access_key`; [Obs] on `window.byted_acrawler`
+during the 2026-09-18 capture, not preserved as a fixture). Confirmed: when the composer
 sends, the outbound WS frame carries the message text and is already signed; no
 `/v1/message/send` HTTP call is made. So there is nothing to "replay" — to send off
 our own code we would have to reproduce `frontierSign`, which is exactly the signer we
-chose never to reverse. **This is a signing wall, not a language or framework wall:
-Go, or a Go bridgev2 connector, does not change it.**
+chose never to reverse. This is a signing wall, not a language or framework wall; a
+Go bridgev2 connector does not change it.
 
 **Five ways to add sending later, cheapest/most-fragile first:**
 
@@ -376,8 +400,8 @@ Go, or a Go bridgev2 connector, does not change it.**
    path — it is how a "foreground, live while the app is open" iOS `WKWebView` mode
    would send too (§10). Cost: a browser context per active sender.
 
-2. **A signing-oracle service (the scalable version of #1).** Run *one* headful
-   browser that exposes TikTok's own signer as an endpoint —
+2. **A signing-oracle service (the scalable version of #1).** Run *one* browser
+   that exposes TikTok's own signer as an endpoint —
    `expose_binding("__sign", (parts) => window.byted_acrawler.frontierSign(parts))`.
    Lightweight per-user clients build the send frame, call the oracle to sign it, and
    push it over their own websocket. This decouples signing from a browser-per-user
