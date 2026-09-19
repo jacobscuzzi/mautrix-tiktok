@@ -445,7 +445,7 @@ class LiveBridge:
         pc = PageClient(playwright_evaluator(page))
         login.provider = WebProvider(pc, avatar_client=None)
         # subscribe frontier -> ingest live messages
-        login.provider.subscribe(lambda m: self._ingest_message(login, m))
+        login.provider.subscribe(lambda m: self._ingest_message(login, m, live=True))
         # identity + encrypted session at rest
         self._save_session(login)
         # existing conversations: the page's own backlog fetch, captured on load.
@@ -617,8 +617,12 @@ class LiveBridge:
         except Exception as e:  # noqa: BLE001
             log.debug("account label read failed: %s", e)
 
-    def _ingest_message(self, login, m):
-        """Ingest one normalized message dict. Returns True if newly inserted."""
+    def _ingest_message(self, login, m, live=False):
+        """Ingest one normalized message dict. Returns True if newly inserted.
+
+        `live` marks a message that just arrived over the frontier websocket: only
+        those measure delivery lag. The backlog and paged history are old by
+        definition and would otherwise report the age of the inbox as lag."""
         ev = normalize.to_event(m)
         if not ev.message_id:
             return False
@@ -634,12 +638,13 @@ class LiveBridge:
         self.pipeline.upsert_thread(login.login_id,
                                     normalize.to_thread({"conversation_id": ev.conversation_id,
                                                          "last_message": {"create_time": ev.timestamp_ms}}))
-        if self.pipeline.ingest_event(ev, login.login_id):
+        if not self.pipeline.ingest_event(ev, login.login_id):
+            return False
+        if live:
             lag = max(0.0, (int(time.time() * 1000) - ev.timestamp_ms) / 1000.0)
             with self._lock:
                 self.lags.append(lag)
-            return True
-        return False
+        return True
 
     # ---- state helpers -------------------------------------------------------
 

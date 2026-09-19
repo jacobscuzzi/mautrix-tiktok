@@ -247,5 +247,28 @@ class TestReconnectClosesStaleBrowser(_Base):
         self.assertEqual(self.bridge.logins["session"].flow, "qr")
 
 
+
+class TestDeliveryLag(_Base):
+    """Delivery lag is TikTok-timestamp -> ingested-at for messages that arrive
+    LIVE. The backlog and paged history are old by definition and must not count,
+    or the p95 shows the age of the inbox (hours) forever."""
+
+    def _msg(self, mid, age_s):
+        return {"server_message_id": mid, "conversation_id": "0:1:42:99", "sender": "99",
+                "content": '{"aweType":0,"text":"hi"}',
+                "create_time": int(time.time() * 1000) - age_s * 1000}
+
+    def test_backlog_and_history_do_not_count(self):
+        login = self._login(state=live.CONNECTED)
+        self.assertTrue(self.bridge._ingest_message(login, self._msg("1", 6 * 3600)))
+        self.assertEqual(list(self.bridge.lags), [])
+
+    def test_live_messages_count(self):
+        login = self._login(state=live.CONNECTED)
+        self.assertTrue(self.bridge._ingest_message(login, self._msg("2", 3), live=True))
+        self.assertEqual(len(self.bridge.lags), 1)
+        self.assertLess(self.bridge.lags[0], 10)
+
+
 if __name__ == "__main__":
     unittest.main()
