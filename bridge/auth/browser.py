@@ -86,5 +86,9 @@ def launch_persistent(playwright, browser_dir, *, headless=True, channel=None,
             return ctx, "chrome"
         except Exception:
             pass
+    if channel == "chromium":
+        # the full Chromium binary in both modes (new headless), never the
+        # separate headless shell: the profile stays with ONE binary
+        kw["channel"] = "chromium"
     ctx = playwright.chromium.launch_persistent_context(**kw)
     return ctx, "chromium"

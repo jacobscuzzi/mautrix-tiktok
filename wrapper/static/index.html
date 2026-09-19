@@ -2,100 +2,117 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TikTok DM Bridge — Tester</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>TikTok DM Bridge</title>
 <style>
   :root{
-    --bg:#0e0f13; --panel:#171922; --panel2:#1f2230; --line:#2a2e3d;
-    --text:#e7e9ef; --muted:#9aa0b4; --accent:#25f4ee; --accent2:#fe2c55;
-    --ok:#3ddc97; --warn:#f5b544; --bad:#fe5b6e;
+    --bg:#0b0c10; --panel:#15171e; --panel2:#1e2129; --line:#272a35;
+    --text:#eef0f5; --muted:#8e94a8; --accent:#25f4ee; --accent2:#fe2c55;
+    --ok:#3ddc97; --warn:#f5b544; --bad:#fe5b6e; --r:18px;
+    --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
   }
-  *{box-sizing:border-box}
-  body{margin:0;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-       background:var(--bg);color:var(--text)}
-  header{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);
-         position:sticky;top:0;background:var(--bg);z-index:5}
-  .logo{font-weight:800;letter-spacing:.3px}
+  *{box-sizing:border-box} html,body{height:100%}
+  body{margin:0;font:15px/1.45 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
+       background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;
+       display:flex;flex-direction:column;min-height:100dvh}
+  header{display:flex;align-items:center;gap:10px;padding:calc(10px + var(--sat)) 16px 10px;
+         border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
+  .logo{font-weight:800;letter-spacing:.2px;font-size:16px}
   .logo b{color:var(--accent)} .logo i{color:var(--accent2);font-style:normal}
-  .tabs{margin-left:auto;display:flex;gap:6px}
-  .tabs button{background:transparent;color:var(--muted);border:1px solid transparent;
-       padding:7px 14px;border-radius:8px;cursor:pointer;font:inherit}
-  .tabs button.active{color:var(--text);background:var(--panel2);border-color:var(--line)}
-  .tabs button:disabled{opacity:.4;cursor:not-allowed}
-  main{max-width:1040px;margin:0 auto;padding:24px 20px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;margin-bottom:18px}
-  h1{font-size:22px;margin:0 0 6px} h2{font-size:15px;margin:0 0 12px;color:var(--muted);
-     text-transform:uppercase;letter-spacing:.6px;font-weight:600}
-  p{color:var(--muted)} .lead{color:var(--text);font-size:16px}
-  button.primary{background:linear-gradient(90deg,var(--accent2),#ff5c85);color:#fff;border:0;
-       padding:12px 22px;border-radius:10px;font:600 15px/1 inherit;cursor:pointer}
-  button.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line);
-       padding:9px 16px;border-radius:9px;cursor:pointer;font:inherit}
-  .sec{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0 4px}
-  .sec .item{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
-  .sec .item b{display:block;color:var(--text);margin-bottom:2px;font-size:14px}
-  .sec .item span{color:var(--muted);font-size:13px}
-  .hint{font-size:13px;color:var(--muted);margin-top:14px}
-  .status{display:flex;align-items:center;gap:10px;margin-top:8px}
-  .dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
-  .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.bad{background:var(--bad)}
-  .spinner{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--accent);
-       border-radius:50%;animation:spin 1s linear infinite;display:inline-block}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  /* chats */
-  .chat{display:grid;grid-template-columns:300px 1fr;gap:0;height:min(560px,68vh);
-        border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel)}
-  .threads{border-right:1px solid var(--line);overflow-y:auto;min-height:0}
-  .threads .row{display:flex;gap:10px;align-items:center;padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--line)}
-  .threads .row:hover{background:var(--panel2)} .threads .row.active{background:var(--panel2)}
-  .avatar{width:34px;height:34px;border-radius:50%;background:var(--panel2);object-fit:cover;flex:0 0 auto}
-  .row .name{font-weight:600;font-size:14px} .row .sub{color:var(--muted);font-size:12px}
-  .messages{display:flex;flex-direction:column;min-height:0}
-  .msgs{flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
-  .bubble{max-width:70%;padding:9px 13px;border-radius:14px;background:var(--panel2);align-self:flex-start;font-size:14px}
-  .bubble.me{align-self:flex-end;background:linear-gradient(90deg,#1c6b68,#188f89);color:#eafffe}
-  .bubble .who{font-size:11px;color:var(--muted);margin-bottom:2px}
-  .bubble.me .who{color:#bdeceb}
-  .dm-media{max-width:220px;max-height:220px;border-radius:10px;display:block}
-  .msgs .empty{margin:auto;color:var(--muted)}
-  .older{text-align:center;padding:8px;border-bottom:1px solid var(--line)}
-  .older button{font-size:13px;padding:6px 14px}
-  .older.loading button{opacity:.6;pointer-events:none}
-  .peer{padding:12px 16px;border-bottom:1px solid var(--line);font-weight:600}
-  .acct{display:flex;align-items:center;gap:12px}
-  .acct .h{font-weight:700}.acct .u{color:var(--muted);font-size:13px}
-  /* health */
-  .metric-hero{display:flex;align-items:baseline;gap:14px}
-  .metric-hero .big{font-size:64px;font-weight:800;line-height:1}
-  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
-  .tile{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px}
-  .tile .k{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
-  .tile .v{font-size:24px;font-weight:700;margin-top:4px}
-  .bar{height:10px;border-radius:6px;background:var(--panel2);overflow:hidden;margin-top:10px}
-  .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--bad),var(--warn),var(--ok))}
-  code{background:var(--panel2);padding:1px 6px;border-radius:5px;font-size:13px}
-  .hidden{display:none}
-  /* button feedback */
-  button{transition:transform .06s ease, opacity .15s ease, filter .15s ease}
-  button:hover{filter:brightness(1.08)}
-  button:active{transform:translateY(1px) scale(.985)}
+  .tabs{margin-left:auto;display:flex;gap:4px;background:var(--panel);padding:4px;border-radius:12px}
+  .tabs button{background:transparent;color:var(--muted);border:0;padding:8px 12px;border-radius:9px;
+               cursor:pointer;font:600 13px/1 inherit;min-height:34px}
+  .tabs button.active{color:var(--text);background:var(--panel2)}
+  .tabs button:disabled{opacity:.35;cursor:not-allowed}
+  main{flex:1;width:100%;max-width:980px;margin:0 auto;padding:16px;display:flex;flex-direction:column;min-height:0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px;margin-bottom:14px}
+  h1{font-size:24px;margin:0 0 6px;letter-spacing:-.3px}
+  p{margin:0;color:var(--muted)}
+  button{font:inherit;cursor:pointer;transition:transform .06s ease,opacity .15s ease,filter .15s ease;min-height:44px}
+  button:hover{filter:brightness(1.08)} button:active{transform:scale(.985)}
   button:disabled,button.busy{opacity:.55;pointer-events:none}
   button.busy{position:relative;color:transparent!important}
   button.busy::after{content:"";position:absolute;inset:0;margin:auto;width:15px;height:15px;
-    border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;
-    animation:spin .7s linear infinite}
-  /* toast */
-  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(12px);
-    background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:11px 18px;
-    border-radius:11px;opacity:0;pointer-events:none;z-index:60;font-size:14px;
-    box-shadow:0 8px 30px rgba(0,0,0,.45);transition:opacity .2s ease, transform .2s ease}
+    border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+  .primary{background:linear-gradient(90deg,var(--accent2),#ff5c85);color:#fff;border:0;
+           padding:13px 22px;border-radius:14px;font-weight:700;font-size:16px;width:100%}
+  .ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line);padding:9px 14px;border-radius:12px;font-weight:600}
+  .ghost.icon{width:44px;padding:0;font-size:18px}
+  .status{display:flex;align-items:center;gap:10px;margin-top:14px;font-weight:600}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:0 0 auto}
+  .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.bad{background:var(--bad)}
+  .spinner{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--accent);
+           border-radius:50%;animation:spin 1s linear infinite;flex:0 0 auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .hint{font-size:13px;color:var(--muted);margin-top:8px}
+  .hint:empty{display:none}
+  .facts{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+  .facts li{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:var(--muted)}
+  .facts li::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent);flex:0 0 auto;margin-top:7px}
+  .facts b{color:var(--text);font-weight:600}
+  /* chats */
+  .topbar{display:flex;align-items:center;gap:12px;padding:12px 14px}
+  .acct{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+  .acct .h{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .acct .u{color:var(--muted);font-size:13px}
+  .avatar{width:38px;height:38px;border-radius:50%;background:var(--panel2);object-fit:cover;flex:0 0 auto}
+  .chat{display:grid;grid-template-columns:300px 1fr;flex:1;min-height:0;height:min(600px,70vh);
+        border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--panel)}
+  .threads{border-right:1px solid var(--line);overflow-y:auto;min-height:0}
+  .row{display:flex;gap:12px;align-items:center;padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--line);min-height:60px}
+  .row:hover,.row.active{background:var(--panel2)}
+  .row .name{font-weight:600;font-size:15px} .row .sub{color:var(--muted);font-size:12px}
+  .threads .note{padding:14px;color:var(--muted);font-size:13px;border-bottom:1px solid var(--line)}
+  .messages{display:flex;flex-direction:column;min-height:0}
+  .peer{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);font-weight:700}
+  .peer .back{display:none;background:transparent;border:0;color:var(--accent);font-size:22px;min-height:36px;padding:0 6px}
+  .older{text-align:center;padding:8px;border-bottom:1px solid var(--line)}
+  .older button{font-size:13px;padding:6px 14px;min-height:34px}
+  .older.loading button{opacity:.6;pointer-events:none}
+  .msgs{flex:1;min-height:0;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:6px;overscroll-behavior:contain}
+  .bubble{max-width:78%;padding:9px 13px;border-radius:18px;background:var(--panel2);align-self:flex-start;font-size:15px;
+          overflow-wrap:anywhere}
+  .bubble.me{align-self:flex-end;background:linear-gradient(90deg,#1c6b68,#188f89);color:#eafffe}
+  .bubble .who{font-size:12px;color:var(--muted);margin-bottom:2px;font-weight:600}
+  .bubble .label{color:var(--muted);font-style:italic} .bubble.me .label{color:#bdeceb}
+  .dm-media{max-width:220px;max-height:220px;border-radius:12px;display:block}
+  .msgs .empty{margin:auto;color:var(--muted);text-align:center;font-size:14px}
+  .msgs .sysnote{align-self:center;color:var(--muted);font-size:12px;font-style:italic}
+  /* health */
+  .hero{display:flex;align-items:baseline;gap:12px}
+  .hero .big{font-size:56px;font-weight:800;line-height:1;letter-spacing:-1px}
+  .bar{height:8px;border-radius:6px;background:var(--panel2);overflow:hidden;margin-top:12px}
+  .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--bad),var(--warn),var(--ok))}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:14px}
+  .tile{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:12px 14px;min-width:0}
+  .tile .k{color:var(--muted);font-size:12px} .tile .v{font-size:22px;font-weight:700;margin-top:2px;overflow-wrap:anywhere}
+  .tile .v.small{font-size:14px;font-weight:600}
+  code{background:var(--panel2);padding:1px 6px;border-radius:5px;font-size:13px}
+  .hidden{display:none!important}
+  .toast{position:fixed;left:50%;bottom:calc(20px + var(--sab));transform:translateX(-50%) translateY(12px);
+    background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:11px 18px;border-radius:14px;
+    opacity:0;pointer-events:none;z-index:60;font-size:14px;box-shadow:0 8px 30px rgba(0,0,0,.45);
+    transition:opacity .2s ease,transform .2s ease;max-width:calc(100% - 32px)}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .toast.ok{border-color:var(--ok)} .toast.bad{border-color:var(--bad)}
+  @media (max-width:720px){
+    main{padding:12px}
+    .card{padding:16px;border-radius:16px}
+    .primary{font-size:17px}
+    .topbar{padding:8px 10px}
+    .chat{grid-template-columns:1fr;height:auto;flex:1;min-height:60vh}
+    .chat.open .threads{display:none}
+    .chat:not(.open) .messages{display:none}
+    .peer .back{display:inline-block}
+    .grid{grid-template-columns:1fr 1fr}
+    .hero .big{font-size:48px}
+  }
 </style>
 </head>
 <body>
 <header>
-  <div class="logo"><b>Tik</b><i>Tok</i> DM Bridge — <span style="color:var(--muted);font-weight:600">Tester</span></div>
+  <div class="logo"><b>Tik</b><i>Tok</i> DM</div>
   <nav class="tabs">
     <button id="tab-connect" class="active" onclick="show('connect')">Connect</button>
     <button id="tab-chats" onclick="show('chats')" disabled>Chats</button>
@@ -106,59 +123,37 @@
   <!-- CONNECT -->
   <section id="view-connect">
     <div class="card">
-      <h1>Connect your TikTok account</h1>
-      <p class="lead">The bridge signs you in through TikTok's own login page (a QR code shown
-        right here, or a real browser window on this machine for password login), then reads
-        your conversations on the backend.</p>
-      <div id="connect-actions" style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap">
-        <button class="primary" onclick="connect('qr')">Scan a QR code</button>
-        <button class="ghost" onclick="connect('password')">Use password / email</button>
+      <h1>Connect TikTok</h1>
+      <p>Log in on TikTok's own page. The window closes by itself.</p>
+      <div id="connect-actions" style="margin-top:18px">
+        <button class="primary" onclick="connect()">Log in with TikTok</button>
       </div>
-      <p class="hint" style="margin-top:10px">Don't know your password or email? <b>Scan a QR code</b>
-        — open TikTok on your phone, go to Profile → menu → Scan, and approve. It is passwordless
-        and the safest option.</p>
       <div id="connect-status" class="status hidden"></div>
-      <div id="qr-box" class="hidden" style="text-align:center;margin-top:16px">
-        <img id="qr-img" alt="QR code" style="width:210px;height:210px;background:#fff;border-radius:12px;padding:8px">
-        <div class="hint" style="margin-top:8px">Open TikTok on your phone → Profile → menu → <b>Scan</b> this code, then approve.</div>
-      </div>
       <div class="hint" id="connect-hint"></div>
     </div>
     <div class="card">
-      <h2>How your data is handled</h2>
-      <p style="margin-top:-4px">Before you log in, here is exactly what happens to your credentials,
-         session and messages. This is enforced in code, not just described.</p>
-      <div class="sec">
-        <div class="item"><b>Your password is never stored</b><span>You type it into TikTok's own
-          page. The bridge never receives or persists it — only the resulting session.</span></div>
-        <div class="item"><b>Session sealed at rest</b><span>The session is additionally
-          stored as an AES-GCM blob (a per-login data key, wrapped by a master key). The
-          browser profile and the local message cache on this machine are not encrypted;
-          both are deleted on logout.</span></div>
-        <div class="item"><b>Deleted on logout</b><span>Log out and every trace — session,
-          messages, contacts and the browser profile — is wiped from this machine.</span></div>
-        <div class="item"><b>One stable identity, log in once</b><span>Your browser profile is
-          created once and reused, so after the first login the saved session is reused with no
-          new login — never a fresh fingerprint each time (which is also what avoids rate limits).</span></div>
-      </div>
-      <p class="hint">This is a tester for a case study, run locally. Use a throwaway account.</p>
+      <ul class="facts">
+        <li><span><b>Your password is never stored.</b> You type it into TikTok's page, not here.</span></li>
+        <li><span><b>Session encrypted at rest.</b> The browser profile and message cache on this machine are not, and are deleted on logout.</span></li>
+        <li><span><b>Log out wipes everything.</b> Session, messages, contacts, browser profile.</span></li>
+      </ul>
+      <p class="hint">Local tester. Use a throwaway account.</p>
     </div>
   </section>
 
   <!-- CHATS -->
-  <section id="view-chats" class="hidden">
-    <div class="card" style="display:flex;align-items:center;gap:16px">
+  <section id="view-chats" class="hidden" style="display:flex;flex-direction:column;flex:1;min-height:0">
+    <div class="card topbar">
       <div class="acct" id="acct"></div>
-      <span class="hint" style="margin:0 0 0 14px">Password login keeps a Chrome window open — closing it disconnects. QR login has no window.</span>
-      <button class="ghost" style="margin-left:auto" onclick="refresh(this)">Refresh</button>
-      <button class="ghost" onclick="logout(this)">Log out &amp; wipe</button>
+      <button class="ghost icon" title="Refresh" aria-label="Refresh" onclick="refresh(this)">⟳</button>
+      <button class="ghost" onclick="logout(this)">Log out</button>
     </div>
-    <div class="chat">
+    <div class="chat" id="chat">
       <div class="threads" id="threads"></div>
       <div class="messages">
-        <div class="peer" id="peer">Select a conversation</div>
-        <div id="older" class="older hidden"><button class="ghost" onclick="loadOlder()">↑ Load older messages</button></div>
-        <div class="msgs" id="msgs"><div class="empty">Your conversations appear here as they sync.</div></div>
+        <div class="peer"><button class="back" aria-label="Back" onclick="closeThread()">‹</button><span id="peer">Pick a chat</span></div>
+        <div id="older" class="older hidden"><button class="ghost" onclick="loadOlder()">Load older</button></div>
+        <div class="msgs" id="msgs"><div class="empty">Pick a chat to read it.</div></div>
       </div>
     </div>
   </section>
@@ -166,27 +161,20 @@
   <!-- HEALTH -->
   <section id="view-health" class="hidden">
     <div class="card">
-      <h2>Production health — the one number</h2>
-      <div class="metric-hero">
+      <div class="hero">
         <div class="big" id="hero">—</div>
-        <div>
-          <div style="font-weight:600">Live-Session-Ratio</div>
-          <div class="hint" style="margin:0">connected &amp; syncing logins ÷ total. Every failure
-            mode collapses into a drop here.</div>
-        </div>
+        <div><div style="font-weight:700">Live sessions</div><div class="hint" style="margin:0">connected ÷ total logins</div></div>
       </div>
       <div class="bar"><i id="herobar" style="width:0%"></i></div>
       <div class="grid">
-        <div class="tile"><div class="k">Password-login share (leading)</div><div class="v" id="m-pw">—</div></div>
+        <div class="tile"><div class="k">Password logins</div><div class="v" id="m-pw">—</div></div>
         <div class="tile"><div class="k">Delivery lag p95</div><div class="v" id="m-lag">—</div></div>
-        <div class="tile"><div class="k">Needs-reauth share</div><div class="v" id="m-reauth">—</div></div>
-        <div class="tile"><div class="k">Logins total</div><div class="v" id="m-total">—</div></div>
-        <div class="tile"><div class="k">States</div><div class="v" id="m-states" style="font-size:15px">—</div></div>
-        <div class="tile"><div class="k">Errors by state</div><div class="v" id="m-errors" style="font-size:15px">—</div></div>
+        <div class="tile"><div class="k">Needs re-auth</div><div class="v" id="m-reauth">—</div></div>
+        <div class="tile"><div class="k">Logins</div><div class="v" id="m-total">—</div></div>
+        <div class="tile"><div class="k">States</div><div class="v small" id="m-states">—</div></div>
+        <div class="tile"><div class="k">Errors</div><div class="v small" id="m-errors">—</div></div>
       </div>
-      <p class="hint">Raw Prometheus text at <code>/metrics</code>. Alert on a sudden drop in the
-        headline (signer/browser outage across all users) and on a rising password-login share
-        (sessions dying early — it precedes challenges and bans).</p>
+      <p class="hint">Prometheus text at <code>/metrics</code>.</p>
     </div>
   </section>
 </main>

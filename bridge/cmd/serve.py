@@ -60,12 +60,12 @@ def main(argv=None):
     ap.add_argument("--wrapper-port", type=int, default=8770)
     ap.add_argument("--bridge-port", type=int, default=8771)
     ap.add_argument("--headless", action="store_true",
-                    help="run the password-login browser headless too (QR login is always "
-                         "headless; a headless password login cannot be completed by hand)")
+                    help="never open a login window (sync is always headless; a fresh "
+                         "login cannot be completed by hand in this mode)")
     ap.add_argument("--no-open", action="store_true")
     ap.add_argument("--data-dir", default="browser-data/_live")
     a = ap.parse_args(argv)
-    logging.basicConfig(level=logging.INFO, format="  %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
     master_key = None
     env_key = os.environ.get("BRIDGE_MASTER_KEY")

@@ -71,7 +71,15 @@ something:
 - **QR in the UI**: the login browser window was intrusive and, on macOS, the trick
   to hide it (close + reopen the same profile) raced the profile lock and leaked
   empty windows, crashing with `NoneType … goto`. Fix: run QR login fully headless
-  and render the QR image *inside* the web UI — no window at all.
+  and render the QR image *inside* the web UI — no window at all. The password
+  window is hidden the same way again since the login-watch fix (close after
+  login, reopen the profile headless), but the relaunch now waits for Chromium's
+  `SingletonLock` to disappear first — the missing step that caused the leak.
+- **Login watch stopped too early**: a throttle message or the 5-minute timeout
+  put the login into a terminal `needs_user` while the window was still open, so
+  a login finished there afterwards was never noticed (and a reconnect launched
+  a second browser on the locked profile). Fix: an open login window is watched
+  until it is closed; a reconnect closes the old browser first.
 - **Async loading**: the conversation list loads late, so the backlog is reloaded
   until it appears rather than assumed present on the first paint.
 

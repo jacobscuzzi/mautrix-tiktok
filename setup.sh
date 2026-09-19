@@ -24,10 +24,11 @@ if ! "$PY" -c "import playwright, cryptography, yaml, requests" >/dev/null 2>&1;
   "$PY" -m pip install -q -r requirements.txt
 fi
 if ! "$PY" - <<'PYCHK' >/dev/null 2>&1
-import glob, os
-root = os.path.expanduser("~/.cache/ms-playwright")
-raise SystemExit(0 if glob.glob(os.path.join(root, "chromium-*", "chrome-linux", "chrome"))
-                 or glob.glob(os.path.join(root, "chromium_headless_shell-*", "*", "*")) else 1)
+# ask Playwright where its Chromium is (Linux, macOS and Windows layouts differ)
+import os
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    raise SystemExit(0 if os.path.exists(p.chromium.executable_path) else 1)
 PYCHK
 then
   say "installing the Chromium browser (first run only)…"
