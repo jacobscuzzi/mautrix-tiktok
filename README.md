@@ -34,9 +34,11 @@ The tester UI (`wrapper/`) is a small web page that talks to the bridge over HTT
 
 **Everything is wiped on logout** (session blob, messages, contacts, browser
 profile). The bridge program is `bridge/` (API in `bridge/webapp.py`, live browser
-worker in `bridge/live.py`). Without `BRIDGE_MASTER_KEY` (32 bytes, base64) the
-sealed session blob uses an ephemeral key; the login itself survives a restart via
-the browser profile under `browser-data/`, so treat that directory as sensitive.
+worker in `bridge/live.py`). The sealed session blob is wrapped with
+`BRIDGE_MASTER_KEY` (32 bytes, base64) if set, otherwise with a key the bridge
+creates on first start and keeps in `browser-data/_live/master.key` (owner-only).
+The login itself survives a restart via the browser profile under `browser-data/`,
+so treat that whole directory as sensitive.
 Offline tests and the fixture-backed demo: [Run it](#run-it).
 
 ## The surface, in one paragraph
@@ -75,7 +77,8 @@ by a test or a live observation — the full table with citations is `DESIGN.md`
 No raw password persisted, ideally never received (QR); the password flow types it
 into TikTok's own page and the bridge API never carries it. The session blob +
 fingerprint is **envelope-encrypted** (`bridge/session_store.py`): a per-login
-AES-GCM data key, wrapped by a master key from env (`BRIDGE_MASTER_KEY`) or a KMS,
+AES-GCM data key, wrapped by a master key from env (`BRIDGE_MASTER_KEY`), a KMS,
+or -- for a zero-config local run -- a key file next to the data (`master.key`, 0600),
 with the login id bound as associated data. Honest limits of the demo: the browser
 profile that keeps the login across restarts and the SQLite cache of contacts and
 messages are plaintext on disk, protected by file permissions only, and both are

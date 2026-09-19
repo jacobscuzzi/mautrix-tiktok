@@ -43,3 +43,31 @@ class TestSessionStore(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMasterKeyFile(unittest.TestCase):
+    """No BRIDGE_MASTER_KEY set: the bridge makes one on first start and keeps it
+    next to the data, owner-readable only, so restarts need no configuration."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.path = os.path.join(self.dir, "master.key")
+
+    def test_creates_a_32_byte_key_owner_only(self):
+        from bridge.session_store import load_or_create_master_key
+        key = load_or_create_master_key(self.path)
+        self.assertEqual(len(key), 32)
+        self.assertEqual(os.stat(self.path).st_mode & 0o777, 0o600)
+
+    def test_reuses_the_same_key_on_restart(self):
+        from bridge.session_store import load_or_create_master_key
+        k1 = load_or_create_master_key(self.path)
+        k2 = load_or_create_master_key(self.path)
+        self.assertEqual(k1, k2)
+
+    def test_corrupt_key_file_is_a_clear_error(self):
+        from bridge.session_store import load_or_create_master_key
+        with open(self.path, "w") as f:
+            f.write("not a key\n")
+        with self.assertRaises(ValueError):
+            load_or_create_master_key(self.path)

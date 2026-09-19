@@ -247,9 +247,10 @@ flow types it into TikTok's own page, and the demo app's API never carries it.
 Persisted is the session blob + fingerprint, **envelope-encrypted at rest**
 (`session_store.py`): a per-login AES-GCM data key encrypts the blob, a master key
 (env `BRIDGE_MASTER_KEY` / KMS seam) wraps the data key, and the login id is bound as
-associated data so blobs cannot be swapped between logins. Without a master key the
-demo uses an ephemeral one and says so; the blob is then an export format, not a
-restart mechanism. What the demo actually reuses across restarts is the Chromium
+associated data so blobs cannot be swapped between logins. Without `BRIDGE_MASTER_KEY`
+the tester generates a key on first start and keeps it as `master.key` (0600) in the
+data dir: zero configuration, and the blob survives restarts, but the key is then
+protected by file permissions only. What the demo actually reuses across restarts is the Chromium
 profile directory, and the SQLite cache of contacts/messages is plaintext — both are
 protected by file permissions only, both are deleted on logout (`POST /api/logout`
 in the app, `DELETE /v1/logins/{id}` in the v1 API). Contact/message content is

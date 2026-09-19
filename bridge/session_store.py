@@ -59,3 +59,32 @@ class SessionStore:
             os.remove(self._path(user_id))
         except FileNotFoundError:
             pass
+
+
+def load_or_create_master_key(path):
+    """The master key for a local install: read it from `path` (base64 text), or
+    make a fresh 32-byte key and store it there owner-readable only (0600).
+
+    This is what runs when `BRIDGE_MASTER_KEY` is not set: the tester needs no
+    configuration and the sealed blob survives restarts. The key then sits on the
+    same disk as the blob, protected by file permissions only -- the same level as
+    the browser profile. A KMS-held key via the env var stays the production path.
+    """
+    import base64
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            raw = f.read().strip()
+        try:
+            key = base64.b64decode(raw, validate=True)
+        except ValueError:
+            key = b""
+        if len(key) != 32:
+            raise ValueError(f"{path} does not hold a 32-byte base64 key; delete it "
+                             f"to generate a new one (old sealed blobs become unreadable)")
+        return key
+    key = os.urandom(32)
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(base64.b64encode(key) + b"\n")
+    return key

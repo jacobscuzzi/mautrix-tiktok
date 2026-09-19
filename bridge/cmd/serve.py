@@ -67,13 +67,22 @@ def main(argv=None):
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-    master_key = None
     env_key = os.environ.get("BRIDGE_MASTER_KEY")
     if env_key:
         import base64
         master_key = base64.b64decode(env_key)
         if len(master_key) != 32:
             raise SystemExit("BRIDGE_MASTER_KEY must be 32 bytes, base64-encoded")
+        key_note = "key from BRIDGE_MASTER_KEY"
+    else:
+        # no configuration needed: a key made on first start, kept with the data
+        from ..session_store import load_or_create_master_key
+        key_path = os.path.join(a.data_dir, "master.key")
+        try:
+            master_key = load_or_create_master_key(key_path)
+        except ValueError as e:
+            raise SystemExit(str(e))
+        key_note = f"key in {key_path}"
 
     live = LiveBridge(data_dir=a.data_dir, master_key=master_key, headless=a.headless)
     live.start()
@@ -90,7 +99,8 @@ def main(argv=None):
     print(f"\n  TikTok DM Bridge tester\n"
           f"  wrapper UI : {url}\n"
           f"  bridge API : http://127.0.0.1:{a.bridge_port}  (/metrics for Prometheus)\n"
-          f"  data dir   : {a.data_dir}  (session sealed at rest; everything wiped on logout)\n"
+          f"  data dir   : {a.data_dir}  (session sealed at rest, {key_note}; "
+          f"everything wiped on logout)\n"
           f"  Ctrl-C to stop.\n")
     if not a.no_open:
         if open_url(url):
