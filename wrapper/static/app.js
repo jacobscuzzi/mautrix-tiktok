@@ -1,5 +1,7 @@
 "use strict";
 let LOGIN_ID = null, POLL = null, HEALTH_POLL = null, CUR_THREAD = null, SELF_UID = null;
+let CONTACTS = {};          // user_id -> contact (names for bubbles and rows)
+let CUR_GROUP = false;      // the open thread is a group (sender names matter)
 
 const $ = (id) => document.getElementById(id);
 async function api(path, opts) {
@@ -35,34 +37,33 @@ function show(view) {
 
 /* ---- connect flow ---- */
 const LABELS = {
-  opening_browser: "Starting the browser…",
-  waiting_login: "Waiting for your TikTok login…",
-  connecting: "Signing in and reading your conversations…",
-  connected: "Connected.",
-  needs_user: "Login needs you (challenge, 2FA, or it timed out).",
-  error: "Something went wrong.",
+  opening_browser: "Opening TikTok…",
+  waiting_login: "Log in on TikTok's page…",
+  connecting: "Reading your chats…",
+  connected: "Connected",
+  needs_user: "Login needs you",
+  error: "Something went wrong",
 };
 const DOT = { connected: "ok", needs_user: "warn", error: "bad" };
 
-async function connect(flow) {
+async function connect() {
   $("connect-actions").classList.add("hidden");
   $("connect-status").classList.remove("hidden");
-  CONNECT_FLOW = flow || "password";
   setStatus("opening_browser");
+  if (POLL) { clearInterval(POLL); POLL = null; }
   let res;
   try {
     res = await api("/api/connect", { method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ flow: CONNECT_FLOW }) });
+      body: JSON.stringify({ flow: "password" }) });
   } catch (e) {
-    setStatus("error", "The bridge is not reachable: " + e.message);
+    setStatus("error", "Bridge not reachable: " + e.message);
     $("connect-actions").classList.remove("hidden");
     return;
   }
   LOGIN_ID = res.login_id;
   POLL = setInterval(pollStatus, 1200);
 }
-let CONNECT_FLOW = "password";
 
 function setStatus(state, err) {
   const dot = DOT[state] || "";
@@ -73,10 +74,8 @@ function setStatus(state, err) {
     `<span>${LABELS[state] || state}</span>`;
   $("connect-hint").textContent =
     state === "waiting_login"
-      ? (CONNECT_FLOW === "qr"
-          ? "Scan the QR code below with the TikTok app: Profile → menu → Scan, then approve."
-          : "A real Chrome window opened on this machine. Your password goes only into TikTok's page.")
-      : err || "";
+      ? "Finish the login in the TikTok window (QR code or phone / email). It closes by itself."
+      : (err || "").replace(/^\w+Error: /, "");
 }
 
 async function pollStatus() {
@@ -84,14 +83,6 @@ async function pollStatus() {
   let st;
   try { st = await api("/api/status?login_id=" + LOGIN_ID); } catch (e) { return; }
   setStatus(st.state, st.last_error);
-  // QR flow: show the code inside this page (no browser window to deal with)
-  const qrBox = $("qr-box");
-  if (st.state === "waiting_login" && CONNECT_FLOW === "qr" && st.qr) {
-    $("qr-img").src = "data:image/png;base64," + st.qr;
-    qrBox.classList.remove("hidden");
-  } else {
-    qrBox.classList.add("hidden");
-  }
   if (st.state === "connected") {
     clearInterval(POLL); POLL = null;
     SELF_UID = st.account && st.account.uid;
@@ -101,7 +92,9 @@ async function pollStatus() {
     refreshChats().catch(() => {});
     POLL = setInterval(() => refreshChats().catch(() => {}), 5000);
   } else if (st.state === "needs_user" || st.state === "error") {
-    clearInterval(POLL); POLL = null;
+    // keep polling: after a throttle message or a timeout the TikTok window is
+    // still open and still watched, so finishing the login there connects us
+    if (st.state === "error") { clearInterval(POLL); POLL = null; }
     $("connect-actions").classList.remove("hidden");
   }
 }
@@ -127,28 +120,30 @@ async function refreshChats() {
   const data = await api("/api/chats?login_id=" + LOGIN_ID);
   const byId = {};
   for (const c of data.contacts) byId[c.user_id] = c;
+  CONTACTS = byId;
   const rows = data.threads.map((t) => {
     const other = otherParty(t);
     const c = byId[other] || {};
+    const group = t.thread_type === "group";
     const name = c.nickname || c.handle || shortConv(t.thread_id);
     const av = c.avatar_url ? `<img class="avatar" src="${escapeHtml(c.avatar_url)}">` : `<div class="avatar"></div>`;
     return `<div class="row ${t.thread_id === CUR_THREAD ? "active" : ""}"
-              data-tid="${escapeHtml(t.thread_id)}" data-name="${escapeHtml(name || "")}">
+              data-tid="${escapeHtml(t.thread_id)}" data-name="${escapeHtml(name || "")}" data-group="${group ? 1 : ""}">
               ${av}<div><div class="name">${escapeHtml(name)}</div>
-              <div class="sub">${t.thread_type === "group" ? "group" : "direct message"}</div></div></div>`;
+              ${group ? `<div class="sub">Group</div>` : ""}</div></div>`;
   });
   // contacts without a thread yet, so the list is never empty after connect
   const threadOthers = new Set(data.threads.map(otherParty));
   const extra = data.contacts.filter((c) => !threadOthers.has(c.user_id)).slice(0, 50).map((c) => {
     const av = c.avatar_url ? `<img class="avatar" src="${escapeHtml(c.avatar_url)}">` : `<div class="avatar"></div>`;
-    return `<div class="row" style="opacity:.7"><div>${av}</div><div><div class="name">${escapeHtml(c.nickname || c.handle)}</div>
-            <div class="sub">contact</div></div></div>`;
+    return `<div class="row" style="opacity:.7">${av}<div><div class="name">${escapeHtml(c.nickname || c.handle)}</div>
+            <div class="sub">Contact</div></div></div>`;
   });
   let header = "";
   if (rows.length === 0) {
     header = extra.length
-      ? `<div style="padding:12px 14px;color:var(--muted);font-size:13px;border-bottom:1px solid var(--line)">No conversations in this account yet — the people you follow are below. Open TikTok to start a chat, then it appears here.</div>`
-      : `<div style="padding:16px;color:var(--muted)">Syncing… if this stays empty, this account has no conversations.</div>`;
+      ? `<div class="note">No chats yet. Start one in TikTok and it shows up here.</div>`
+      : `<div class="note">Syncing…</div>`;
   }
   $("threads").innerHTML = header + rows.join("") + extra.join("");
   if (CUR_THREAD) loadMessages(CUR_THREAD);
@@ -158,7 +153,7 @@ async function refreshChats() {
 document.addEventListener("DOMContentLoaded", () => {
   $("threads").addEventListener("click", (ev) => {
     const row = ev.target.closest(".row[data-tid]");
-    if (row) openThread(row.dataset.tid, row.dataset.name);
+    if (row) openThread(row.dataset.tid, row.dataset.name, !!row.dataset.group);
   });
 });
 
@@ -167,15 +162,23 @@ function otherParty(t) {
   const ids = parts.slice(2);
   return ids.find((x) => x !== SELF_UID) || ids[ids.length - 1] || "";
 }
-function shortConv(id) { const p = (id || "").split(":"); return "chat " + (p[p.length - 1] || id).slice(-6); }
+function shortConv(id) { const p = (id || "").split(":"); return "Chat " + (p[p.length - 1] || id).slice(-4); }
+function nameOf(uid) { const c = CONTACTS[uid] || {}; return c.nickname || c.handle || ""; }
 
-async function openThread(tid, name) {
+async function openThread(tid, name, group) {
   CUR_THREAD = tid;
-  $("peer").textContent = name || "Conversation";
+  CUR_GROUP = !!group;
+  $("chat").classList.add("open");             // phone: show the messages pane
+  $("peer").textContent = name || "Chat";
   LAST_RENDER = "";                       // force a fresh render + scroll to bottom
   $("older").classList.remove("hidden", "loading");   // offer "load older"
   document.querySelectorAll(".threads .row").forEach((r) => r.classList.remove("active"));
   await loadMessages(tid, { force: true, toBottom: true });
+}
+
+// phone: back to the chat list (the thread stays selected on wide screens)
+function closeThread() {
+  $("chat").classList.remove("open");
 }
 
 
@@ -206,13 +209,23 @@ async function loadOlder() {
 
 let LAST_RENDER = "";   // thread + last message id: skip re-render when nothing changed
 
+// what an empty-bodied bubble of each kind says (never a blank bubble)
+const KIND_LABEL = { text: "Empty message", sticker: "Sticker", gif: "GIF", image: "Photo",
+                     video: "Video", share: "Shared a video", system: "System notice",
+                     unknown: "Unsupported message" };
+
 async function loadMessages(tid, opts) {
   opts = opts || {};
   const msgs = await api(`/api/messages?login_id=${LOGIN_ID}&thread_id=${encodeURIComponent(tid)}`);
   const box = $("msgs");
-  if (!msgs.length) {
-    box.innerHTML = `<div class="empty">No messages synced yet in this conversation.</div>`;
-    LAST_RENDER = tid + ":empty";
+  // one-sided server notices ("say hi" hints, request banners) are not chat
+  const shown = msgs.filter((m) => m.kind !== "system");
+  const hidden = msgs.length - shown.length;
+  const hiddenNote = hidden
+    ? `<div class="sysnote">${hidden} system notice${hidden === 1 ? "" : "s"} hidden</div>` : "";
+  if (!shown.length) {
+    box.innerHTML = `<div class="empty">No messages yet.${hiddenNote}</div>`;
+    LAST_RENDER = tid + ":empty:" + msgs.length;
     return;
   }
   const sig = tid + ":" + msgs.length + ":" + msgs[msgs.length - 1].message_id;
@@ -221,15 +234,23 @@ async function loadMessages(tid, opts) {
   const prevTop = box.scrollTop;
   LAST_RENDER = sig;
   const MEDIA = ["gif", "image", "sticker"];
-  box.innerHTML = msgs.map((m) => {
+  box.innerHTML = hiddenNote + shown.map((m) => {
     const me = m.sender_id === SELF_UID;
-    const who = !me ? `<div class="who">${m.sender_id.slice(-6)}</div>` : "";
+    // sender name only in groups; in a direct chat the header already says who
+    const who = (!me && CUR_GROUP && nameOf(m.sender_id))
+      ? `<div class="who">${escapeHtml(nameOf(m.sender_id))}</div>` : "";
     let inner;
     if (MEDIA.includes(m.kind) && /^https?:\/\//.test(m.content || "")) {
       inner = `<img class="dm-media" src="${m.content}" alt="${m.kind}" loading="lazy"
                 onerror="this.replaceWith(document.createTextNode('[${m.kind}]'))">`;
+    } else if (m.kind === "share") {
+      // a shared TikTok video/post: label it, plus its caption when we have one
+      inner = `<span class="label">▶ Shared a video</span>` +
+              (m.content ? `<div>${escapeHtml(m.content)}</div>` : "");
+    } else if (m.content) {
+      inner = escapeHtml(m.content);
     } else {
-      inner = escapeHtml(m.content || (m.kind !== "text" ? "[" + m.kind + "]" : ""));
+      inner = `<span class="label">${KIND_LABEL[m.kind] || "Unsupported message"}</span>`;
     }
     return `<div class="bubble ${me ? "me" : ""}">${who}${inner}</div>`;
   }).join("");
@@ -247,13 +268,17 @@ async function logout(btn) {
     if (LOGIN_ID) await api("/api/logout", { method: "POST",
       headers: { "Content-Type": "application/json" }, body: JSON.stringify({ login_id: LOGIN_ID }) });
   });
-  LOGIN_ID = null; CUR_THREAD = null; SELF_UID = null;
+  LOGIN_ID = null; CUR_THREAD = null; SELF_UID = null; CONTACTS = {}; CUR_GROUP = false;
+  $("chat").classList.remove("open");
+  $("peer").textContent = "Pick a chat";
+  $("msgs").innerHTML = `<div class="empty">Pick a chat to read it.</div>`;
+  $("threads").innerHTML = "";
   $("tab-chats").disabled = true;
   $("connect-actions").classList.remove("hidden");
   $("connect-status").classList.add("hidden");
   $("acct").innerHTML = "";
   show("connect");
-  toast("Logged out and wiped", "ok");
+  toast("Logged out", "ok");
 }
 
 /* ---- health ---- */

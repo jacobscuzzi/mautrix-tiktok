@@ -38,9 +38,36 @@ from .web.page import PageClient, playwright_evaluator
 
 log = logging.getLogger("bridge.live")
 
-LOGIN_URL = "https://www.tiktok.com/login/phone-or-email/email"
+# TikTok's own chooser: "Use QR code" / "Use phone / email / username" / social
+LOGIN_URL = "https://www.tiktok.com/login"
 QR_URL = "https://www.tiktok.com/login/qrcode"
 MESSAGES_URL = "https://www.tiktok.com/messages"
+
+# Chromium's process-singleton files inside the profile directory.
+_SINGLETON_FILES = ("SingletonLock", "SingletonSocket", "SingletonCookie")
+
+
+def wait_profile_unlocked(profile_root, timeout=15.0):
+    """Wait until no Chromium holds the profile. Launching on a still-locked
+    profile does not fail: Chromium hands the launch to the running instance,
+    which opens an extra empty window there and gives us no page at all (the
+    macOS "empty windows + NoneType goto" crash). Returns False on timeout."""
+    profile = os.path.join(profile_root, "profile")
+    deadline = time.time() + timeout
+    while True:
+        if not any(os.path.lexists(os.path.join(profile, f)) for f in _SINGLETON_FILES):
+            return True
+        if time.time() >= deadline:
+            return False
+        time.sleep(0.1)
+
+
+def _page_closed(page):
+    try:
+        return bool(page.is_closed())
+    except Exception:  # noqa: BLE001
+        return True
+
 
 # state machine for one login
 OPENING = "opening_browser"
@@ -64,6 +91,7 @@ class LiveLogin:
         self.last_sync_ms = 0
         self.authenticated = False
         self.qr_png = None             # base64 QR image, shown in the wrapper UI
+        self.headless = True           # current browser mode (a window only for typing)
         self.init_bodies = []          # get_by_user_init protobuf bodies (backlog)
         self.init_request = None        # decoded init request envelope (history template)
         self.im_api_url = None          # a signed im-api URL to reuse for history
@@ -138,6 +166,10 @@ class LiveBridge:
             self.logins[login_id] = login
         self.pipeline.upsert_login(login_id, source="web", state=OPENING,
                                    password_login_used=login.password_login_used)
+        if existing is not None:
+            # a failed login may still own the window on this profile: close it
+            # first, or the new launch races the profile lock / opens a 2nd window
+            self._q.put(("close", existing))
         self._q.put(("open", login_id))
         return login_id
 
@@ -213,6 +245,8 @@ class LiveBridge:
                     self._do_open(arg)
                 elif cmd == "logout":
                     self._do_logout(arg)
+                elif cmd == "close":
+                    self._do_close(arg)
                 elif cmd == "call":
                     arg()
                 # periodic tick: detect logins, pump pages, sync
@@ -226,22 +260,20 @@ class LiveBridge:
         login = self.logins.get(login_id)
         if not login:
             return
-        # QR login runs fully HEADLESS -- the QR image is shown inside the wrapper
-        # UI, so there is no browser window at all. Password login needs a visible
-        # window (the user types into TikTok's own page), so it runs headful.
-        headless = True if login.flow == "qr" else self.headless
+        # Everything runs HEADLESS -- the user reads their chats in the wrapper UI.
+        # The one exception is a password login: the user must type into TikTok's
+        # own page, so that (and only that) gets a visible window, which is swapped
+        # back for a headless browser on the same profile as soon as the session
+        # exists (`_check_login`). QR login shows the code inside the wrapper UI.
         try:
-            # ONE persistent context for the whole flow -- login and sync. We never
-            # close-and-reopen the same profile (that swap leaks windows and races
-            # the profile lock, esp. on macOS).
-            self._open_context(login, headless=headless)
+            self._open_context(login, headless=True)
         except Exception as e:  # browser failed to launch (e.g. Chromium not installed)
             self._fail(login, ERROR, RuntimeError(
                 f"could not start the browser: {e}. Run ./setup.sh (installs "
                 f"Playwright + Chromium)."))
             return
         try:
-            # try an existing session first
+            # try an existing session first: no window at all
             login.page.goto(MESSAGES_URL, wait_until="domcontentloaded", timeout=45000)
             login.page.wait_for_timeout(2500)
             cookies = {c["name"]: c["value"] for c in login.ctx.cookies()}
@@ -249,23 +281,60 @@ class LiveBridge:
                 self._set_state(login, CONNECTING)
                 self._establish(login, cookies)     # already logged in
                 return
-            # need to log in: QR -> generate + show in the UI; password -> the window
-            start_url = QR_URL if login.flow == "qr" else LOGIN_URL
-            login.page.goto(start_url, wait_until="domcontentloaded", timeout=45000)
-            login.page.wait_for_timeout(1500)       # let the QR image render/arrive
+            if login.flow == "qr":
+                login.page.goto(QR_URL, wait_until="domcontentloaded", timeout=45000)
+                login.page.wait_for_timeout(1500)   # let the QR image render/arrive
+            else:
+                self._relaunch(login, headless=self.headless)   # the login window
+                login.page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=45000)
+                login.page.wait_for_timeout(1500)
             self._set_state(login, WAITING_LOGIN)
         except Exception as e:
             self._fail(login, ERROR, e)
 
     def _open_context(self, login, headless):
+        if not wait_profile_unlocked(login.profile_dir):
+            log.warning("profile %s still locked after 15s; launching anyway",
+                        login.profile_dir)
         ctx, _ = browserfac.launch_persistent(
             self._p, login.profile_dir, headless=headless, channel="chromium")
         login.ctx = ctx
+        login.headless = headless
         login.page = ctx.pages[0] if ctx.pages else ctx.new_page()
         login.page.on("websocket", lambda ws: self._attach_ws(login, ws))
         # the /messages page fetches the existing-conversation backlog itself
         # (protobuf get_by_user_init); capture it so existing chats show at once.
         ctx.on("response", lambda r: self._capture_init(login, r))
+
+    def _relaunch(self, login, headless):
+        """Close the current browser and reopen the SAME profile in the other mode.
+
+        The profile keeps the device identity (never rotated) and the cookies are
+        carried over explicitly, so the session survives even if Chromium had not
+        flushed them to disk yet. `_open_context` waits for the old process to
+        release the profile before launching -- the missing step that made the
+        earlier swap leak empty windows on macOS.
+        """
+        if login.ctx is not None and login.headless == headless:
+            return
+        cookies = []
+        if login.ctx is not None:
+            try:
+                cookies = login.ctx.cookies()
+            except Exception as e:  # noqa: BLE001
+                log.debug("cookie read before relaunch: %s", e)
+            try:
+                login.ctx.close()
+            except Exception as e:  # noqa: BLE001
+                log.debug("context close before relaunch: %s", e)
+            login.ctx = None
+            login.page = None
+        self._open_context(login, headless=headless)
+        if cookies:
+            try:
+                login.ctx.add_cookies(cookies)
+            except Exception as e:  # noqa: BLE001
+                log.debug("cookie carry-over: %s", e)
 
     def _capture_init(self, login, resp):
         try:
@@ -302,7 +371,11 @@ class LiveBridge:
     def _tick(self):
         for login in list(self.logins.values()):
             try:
-                if login.state == WAITING_LOGIN:
+                if login.state == WAITING_LOGIN or (
+                        login.state == NEEDS_USER and login.ctx is not None
+                        and login.provider is None):
+                    # NEEDS_USER after a throttle message or the timeout is not the
+                    # end: the window is still open and the user may still get in.
                     self._check_login(login)
                 elif login.state == CONNECTED:
                     self._sync_tick(login)
@@ -312,22 +385,38 @@ class LiveBridge:
     def _check_login(self, login):
         if login.ctx is None:
             return
-        if time.time() - login._t_login > self.login_timeout:
-            self._fail(login, NEEDS_USER, RuntimeError("login timed out"))
+        if login.page is None or _page_closed(login.page):
+            # the user closed the login window (macOS: the red button leaves a
+            # windowless Chromium behind that still locks the profile)
+            if login.state == WAITING_LOGIN:
+                self._do_close(login)
+                self._fail(login, NEEDS_USER, RuntimeError(
+                    "the TikTok window was closed before the login finished. "
+                    "Click 'Log in with TikTok' to open it again."))
             return
         cookies = {c["name"]: c["value"] for c in login.ctx.cookies()}
         if not cookies.get("sessionid"):
-            if self._login_blocked(login.page):
-                self._fail(login, NEEDS_USER, RuntimeError(
-                    "TikTok is rate-limiting logins (max attempts). Try 'Scan a QR "
-                    "code' (passwordless, usually not throttled), or wait ~15-60 min, "
-                    "or use a different throwaway account. Once you're in, the session "
-                    "is saved and reused -- don't log out & wipe."))
-                return
+            if login.state == WAITING_LOGIN:
+                # surfaced once; the window stays open and is still watched
+                if time.time() - login._t_login > self.login_timeout:
+                    self._fail(login, NEEDS_USER, RuntimeError(
+                        "login timed out. The TikTok window is still open: finish "
+                        "logging in there and this page connects by itself."))
+                    return
+                if self._login_blocked(login.page):
+                    self._fail(login, NEEDS_USER, RuntimeError(
+                        "TikTok is rate-limiting logins (max attempts). Pick 'Use QR "
+                        "code' on TikTok's page (usually not throttled), or wait ~15-60 "
+                        "min, or use a different throwaway account. The window stays "
+                        "open: once you're in, the session is saved and reused -- don't "
+                        "log out & wipe."))
+                    return
             login.page.wait_for_timeout(300)   # pump events
             return
-        # logged in -> connect (same window keeps syncing)
+        # logged in -> the window goes away, a headless browser on the same
+        # profile takes over and syncs in the background
         self._set_state(login, CONNECTING)
+        self._relaunch(login, headless=True)
         self._establish(login, cookies)
 
     @staticmethod
@@ -559,9 +648,22 @@ class LiveBridge:
             login.state = state
         self.pipeline.set_login_state(login.login_id, state)
 
+    def _do_close(self, login):
+        """Close a failed login's browser so the profile is free for the next one."""
+        try:
+            if login.ctx:
+                login.ctx.close()
+        except Exception as e:  # noqa: BLE001
+            log.debug("context close on reconnect: %s", e)
+        with self._lock:
+            login.ctx = None
+            login.page = None
+            login.provider = None
+
     def _fail(self, login, state, exc):
         login.authenticated = False
         login.last_error = f"{type(exc).__name__}: {exc}"
+        log.warning("login %s -> %s: %s", login.login_id, state, login.last_error)
         with self._lock:
             login.state = state
             self.error_totals[state] = self.error_totals.get(state, 0) + 1

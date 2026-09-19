@@ -12,7 +12,6 @@ logged at debug and dropped, never raised. Dedup key = x_frontier_msg_id + messa
 from __future__ import annotations
 
 import gzip
-import json
 import logging
 
 from .. import proto
@@ -62,23 +61,68 @@ def _first(d, idx):
 
 
 def _content_text(content):
-    """Return (text, is_message): the text of a DM content JSON (None when it has
-    none), and False for a conversation command frame.
+    """Return (content_str, is_message) for a DM content field.
 
-    Content is a JSON string like {"aweType":0,"text":"hi"}. A read-receipt /
-    system frame carries {"command_type":1,...} and is not a message.
+    Content is a JSON string like {"aweType":0,"text":"hi"}; a shared video, a
+    photo or a sticker is JSON too, just without a `text` key. The WHOLE string is
+    handed downstream (normalize decides the kind) -- flattening it to `text` here
+    is what turned every non-text DM into an empty bubble. A read-receipt / system
+    frame carries {"command_type":1,...} and is not a message.
     """
+    if isinstance(content, dict):
+        # a short string that happens to parse as protobuf (the 2-byte notice
+        # body "pl" reads as field 14 = 108): put the original bytes back.
+        content = proto.encode_tree(content)
+    if isinstance(content, (bytes, bytearray)):
+        # decode_tree keeps a string as bytes when str.isprintable() is false,
+        # e.g. an nbsp or the zero-width joiner inside many emoji.
+        content = content.decode("utf-8", "replace")
     if not isinstance(content, str) or not content:
         return None, True
     if '"command_type"' in content:
         return None, False   # a conversation command (mark-read etc.), not a DM
-    try:
-        obj = json.loads(content)
-    except ValueError:
-        return content, True
-    if isinstance(obj, dict):
-        return obj.get("text"), True
-    return None, True
+    return content, True
+
+
+_empty_seen = set()
+
+
+def _preview(v, depth=0):
+    """A compact, truncated view of a decoded tree for the diagnostic log."""
+    if isinstance(v, dict):
+        return {k: [_preview(x, depth + 1) for x in vals[:3]] for k, vals in v.items()}
+    if isinstance(v, (bytes, bytearray)):
+        return f"<{len(v)} bytes>"
+    if isinstance(v, str):
+        return v[:60] + ("…" if len(v) > 60 else "")
+    return v
+
+
+def _note_empty_content(m, mid):
+    """Log (once per field layout) a DM whose f8 content is empty: the payload
+    then rides in another field, and this log is how we learn which one."""
+    layout = tuple(sorted(m.keys()))
+    if layout in _empty_seen:
+        return
+    _empty_seen.add(layout)
+    log.warning("DM %s has an empty content field; fields present: %s -- %s",
+                mid, list(layout), _preview({k: v for k, v in m.items() if k != 1}))
+
+
+def _ext_map(m):
+    """f9 = repeated {1: key, 2: value} -- the message's ext map (e.g. `s:visible`
+    = the ONE user a server-side notice is shown to, `s:client_message_id`)."""
+    out = {}
+    for e in m.get(9, []):
+        if isinstance(e, dict):
+            k, v = _first(e, 1), _first(e, 2)
+            if isinstance(k, (bytes, bytearray)):
+                k = k.decode("utf-8", "replace")
+            if isinstance(v, (bytes, bytearray)):
+                v = v.decode("utf-8", "replace")
+            if isinstance(k, str):
+                out[k] = v if isinstance(v, str) else str(v)
+    return out
 
 
 def _message_from_inner(m, header_msg_id):
@@ -86,7 +130,7 @@ def _message_from_inner(m, header_msg_id):
 
     Field numbers confirmed from a live capture (DESIGN.md §4):
       f1 conversation_id | f3 server_message_id | f4 create_time (microseconds) |
-      f7 sender_id | f8 content JSON | f14 sender sec_uid.
+      f7 sender_id | f8 content JSON | f9 ext {1 key, 2 value}[] | f14 sender sec_uid.
     """
     conv = _first(m, 1)
     mid = _first(m, 3)
@@ -96,9 +140,12 @@ def _message_from_inner(m, header_msg_id):
     content = _first(m, 8)
     if mid is None:
         return None
-    text, is_message = _content_text(content)
+    content, is_message = _content_text(content)
     if not is_message:
         return None            # command / read-receipt frame
+    ext = _ext_map(m)
+    if not content and "s:visible" not in ext:
+        _note_empty_content(m, mid)
     ts_ms = int(ts_us // 1000) if isinstance(ts_us, int) else 0
     return {
         "conversation_id": str(conv) if conv is not None else "",
@@ -107,7 +154,8 @@ def _message_from_inner(m, header_msg_id):
         "create_time": ts_ms,
         "create_time_us": ts_us if isinstance(ts_us, int) else 0,
         "conv_short_id": short if isinstance(short, int) else None,
-        "content": text or "",
+        "content": content or "",
+        "ext": ext,
         "raw_ref": header_msg_id,
     }
 

@@ -16,16 +16,17 @@ That is the whole setup: the script creates the venv, installs the Python deps a
 a Chromium on the first run, starts the bridge plus the tester UI and opens
 <http://127.0.0.1:8770> in your browser. Re-running it is fast. If the file is not
 executable (fresh clone, zip download), `sh bridge-app.sh` or `bash bridge-app.sh`
-does the same thing. QR login needs no display at all (the QR code is rendered in
-the UI); password login opens a real Chromium window, so it needs one (on WSL that
-is WSLg `$DISPLAY`). Use a throwaway TikTok account.
+does the same thing. Login opens a real Chromium window on TikTok's own login page
+(QR code or phone / email / username, your choice there), so it needs a display (on
+WSL that is WSLg `$DISPLAY`); the window closes itself once you are in. Use a
+throwaway TikTok account.
 
 The tester UI (`wrapper/`) is a small web page that talks to the bridge over HTTP:
 
 1. **Connect** — a plain-language panel explains exactly how your data is handled,
-   then you pick QR (scan it in the TikTok app, shown right in the UI) or password
-   (a real Chromium window opens on TikTok's own login page). Either way the
-   bridge never sees your password.
+   then one button opens TikTok's own login page in a real Chromium window, where
+   you pick QR (scan it in the TikTok app) or phone / email / username. The window
+   closes itself once you are in. Either way the bridge never sees your password.
 2. **Chats** — once connected, your real contacts, threads and messages sync in and
    render; new DMs arrive live over the frontier socket.
 3. **Health** — the one production number, Live-Session-Ratio, shown big, with the

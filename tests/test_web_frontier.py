@@ -7,6 +7,7 @@ import unittest
 from bridge import proto
 from bridge.web import frontier
 from bridge.providers.web import WebProvider
+from bridge.normalize import extract_text
 
 FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "web")
 
@@ -53,7 +54,7 @@ class TestFrontier(unittest.TestCase):
         self.assertEqual(len(msgs), 1)
         self.assertEqual(msgs[0]["server_message_id"], "7500000000000000009")
         self.assertEqual(msgs[0]["sender"], "901")
-        self.assertEqual(msgs[0]["content"], "hello dm")
+        self.assertEqual(extract_text(msgs[0]["content"]), "hello dm")
         self.assertEqual(msgs[0]["create_time"], 1789707000000)  # us -> ms
         self.assertEqual(msgs[0]["raw_ref"], "msg_z")
 
@@ -129,7 +130,7 @@ class TestInitBacklog(unittest.TestCase):
         self.assertEqual([m["server_message_id"] for m in msgs], ["101", "102", "201"])
         self.assertEqual({m["conversation_id"] for m in msgs}, {"0:1:1:2", "0:1:1:3"})
         self.assertEqual(msgs[1]["sender"], "1")
-        self.assertEqual(msgs[2]["content"], "other chat")
+        self.assertEqual(extract_text(msgs[2]["content"]), "other chat")
 
     def test_backlog_skips_commands_and_garbage(self):
         body = self._init_body([("0:1:1:2", 5, 1, 2, '{"command_type":1}')])
@@ -147,7 +148,7 @@ class TestFrontierThroughProvider(unittest.TestCase):
                              '{"aweType":0,"text":"hi"}', headers={":x_frontier_msg_id": "msg_1"})
         got = wp.on_frontier_frame(raw)
         self.assertEqual(got[0]["server_message_id"], "12345")
-        self.assertEqual(got[0]["content"], "hi")
+        self.assertEqual(extract_text(got[0]["content"]), "hi")
 
     def test_reconcile_only_when_gap(self):
         class P:
@@ -193,3 +194,69 @@ class TestConversationHistory(unittest.TestCase):
         nxt, more = frontier.conversation_cursor(body)
         self.assertEqual(nxt, 1789743600000000)
         self.assertTrue(more)
+
+
+class TestContentShapes(unittest.TestCase):
+    """Real DMs are not only text: shared videos, photos, stickers. The frontier
+    parser must hand the WHOLE content JSON downstream (normalize decides the kind),
+    never flatten it to the `text` key and drop the rest as an empty message."""
+
+    def _init_body(self, messages):
+        block = bytearray()
+        for conv, mid, ts_us, sender, content in messages:
+            block += proto.encode_fields({1: proto.encode_fields(
+                {1: conv.encode(), 3: mid, 4: ts_us, 7: sender, 8: content})})
+        return proto.encode_fields({1: 203, 4: b"OK",
+                                    6: proto.encode_fields({203: bytes(block)})})
+
+    def test_video_share_keeps_content_and_becomes_share(self):
+        from bridge import normalize
+        share = ('{"aweType":2,"itemId":"7300000000000000001","title":"look at this",'
+                 '"coverUrl":"https://p16-sign.tiktokcdn.com/c.jpeg"}')
+        body = self._init_body([("0:1:1:2", 7, 1789751000000000, 2, share.encode())])
+        msgs = list(frontier.messages_from_init_body(body))
+        self.assertEqual(len(msgs), 1)
+        self.assertEqual(msgs[0]["content"], share)     # raw JSON, nothing dropped
+        ev = normalize.to_event(msgs[0])
+        self.assertEqual(ev.kind, "share")
+        self.assertEqual(ev.text, "look at this")
+
+    def test_text_with_non_printable_unicode_is_still_text(self):
+        # U+00A0 (nbsp) and U+200D (zero-width joiner, in many emoji) make
+        # str.isprintable() false -> decode_tree hands the content over as bytes.
+        from bridge import normalize
+        content = '{"aweType":0,"text":"salut toi 👨‍👩‍👧"}'.encode()
+        body = self._init_body([("0:1:1:2", 8, 1789751000000000, 2, content)])
+        msgs = list(frontier.messages_from_init_body(body))
+        self.assertEqual(len(msgs), 1)
+        ev = normalize.to_event(msgs[0])
+        self.assertEqual(ev.kind, "text")
+        self.assertEqual(ev.text, "salut toi 👨‍👩‍👧")
+
+    def test_unknown_json_is_never_an_empty_text_message(self):
+        from bridge import normalize
+        content = b'{"aweType":1234,"somethingNew":{"a":1}}'
+        body = self._init_body([("0:1:1:2", 9, 1789751000000000, 2, content)])
+        msgs = list(frontier.messages_from_init_body(body))
+        ev = normalize.to_event(msgs[0])
+        self.assertNotEqual((ev.kind, ev.text), ("text", ""))
+        self.assertEqual(ev.kind, "unknown")
+
+    def test_command_frames_still_skipped(self):
+        body = self._init_body([("0:1:1:2", 5, 1, 2, b'{"command_type":1}')])
+        self.assertEqual(list(frontier.messages_from_init_body(body)), [])
+
+    def test_ext_map_is_exposed_and_notice_becomes_system(self):
+        from bridge import normalize
+        ext = proto.encode_fields({1: b"s:visible", 2: b"7072771823255405573"})
+        ext2 = proto.encode_fields({1: b"s:client_message_id", 2: b"abc"})
+        msg = bytearray(proto.encode_fields({1: b"0:1:1:2", 3: 77, 4: 1759817154045982,
+                                             7: 2, 8: b"pl"}))
+        msg += proto.encode_fields({9: ext}) + proto.encode_fields({9: ext2})
+        body = proto.encode_fields({1: 203, 4: b"OK", 6: proto.encode_fields(
+            {203: proto.encode_fields({1: bytes(msg)})})})
+        msgs = list(frontier.messages_from_init_body(body))
+        self.assertEqual(len(msgs), 1)
+        self.assertEqual(msgs[0]["ext"], {"s:visible": "7072771823255405573",
+                                          "s:client_message_id": "abc"})
+        self.assertEqual(normalize.to_event(msgs[0]).kind, "system")
