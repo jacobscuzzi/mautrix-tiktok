@@ -60,19 +60,19 @@
           "follow_status": 0,
           "follower_status": 0,
           "maf_status": 2,
-          "nick_name": "Contact 458",
+          "nick_name": "Contact 35",
           "signature": "",
           "unique_id": "user_fake8",
           "update_time": 1789707680659,
-          "user_id": 9999999999999990007,
-          "user_id_str": "9999999999999990007",
+          "user_id": 8999999999999990007,
+          "user_id_str": "8999999999999990007",
           "user_verify_reason": "",
           "user_verify_type": 0
         },
         "share_permission": {
           "ttn_share_status": 0,
           "update_time": 1789707680659,
-          "user_id": 9999999999999990007,
+          "user_id": 8999999999999990007,
           "user_share_status": 1
         }
       }

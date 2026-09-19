@@ -1,5 +1,5 @@
 {
-  "generated_from": "browser-data/jakob (empty inbox, 2026-09-18)",
+  "generated_from": "a logged-in web capture (2026-09-18), redacted with scripts/redact-capture.py",
   "fixtures": [
     {
       "kind": "ws_outbound",
@@ -34,7 +34,7 @@
       "method": "POST",
       "captured_at": 1789707472.283254,
       "redacted": true,
-      "notes": "protobuf body (im-api); ids pseudonymized",
+      "notes": "protobuf body (im-api); ids pseudonymized, request metadata blanked",
       "file": "conv_list.json"
     },
     {
@@ -43,7 +43,7 @@
       "method": "POST",
       "captured_at": 1789707472.957929,
       "redacted": true,
-      "notes": "protobuf body (im-api); ids pseudonymized",
+      "notes": "protobuf body (im-api); ids pseudonymized, request metadata blanked",
       "file": "messages_page.json"
     },
     {
