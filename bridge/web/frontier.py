@@ -4,10 +4,10 @@ Frame envelope (confirmed live, field notes below):
   1 seqid | 2 logid | 3 service | 4 method | 5 repeated header {1:key,2:value}
   6 encoding ("gzip"|"") | 8 payload (gunzip when field 6 == "gzip")
 
-The account inbox was empty at capture, so no DM message body was seen; the inner
-body layout below is [Inf] from the mobile IM SDK and is isolated here so a wrong
-guess is one function to fix, never a raise. Unknown payload methods are logged at
-debug and dropped, never raised. Dedup key = x_frontier_msg_id + message id.
+The inner Message layout (f1 conv, f3 id, f4 ts_us, f7 sender, f8 content) was
+confirmed from a live DM capture and is isolated in `_message_from_inner`, so a
+shape change is one function to fix, never a raise. Unknown payload methods are
+logged at debug and dropped, never raised. Dedup key = x_frontier_msg_id + message id.
 """
 from __future__ import annotations
 
@@ -18,10 +18,6 @@ import logging
 from .. import proto
 
 log = logging.getLogger("bridge.web.frontier")
-
-# X-Method values that carry DM payloads. PayloadRelatedMethod is what the capture
-# showed for the sync channel; NewMessage/MessageByUser are [Inf] names to accept.
-DM_METHODS = {"PayloadRelatedMethod", "NewMessage", "MessagePush", "MessageByUser"}
 
 
 def _s(v):
@@ -66,7 +62,8 @@ def _first(d, idx):
 
 
 def _content_text(content):
-    """Return the text of a DM content JSON, or None for a command / non-text.
+    """Return (text, is_message): the text of a DM content JSON (None when it has
+    none), and False for a conversation command frame.
 
     Content is a JSON string like {"aweType":0,"text":"hi"}. A read-receipt /
     system frame carries {"command_type":1,...} and is not a message.
@@ -87,7 +84,7 @@ def _content_text(content):
 def _message_from_inner(m, header_msg_id):
     """Map one inner Message body -> normalized dict, or None.
 
-    Field numbers confirmed from a live capture; see DESIGN.md §0/§13:
+    Field numbers confirmed from a live capture (DESIGN.md §4):
       f1 conversation_id | f3 server_message_id | f4 create_time (microseconds) |
       f7 sender_id | f8 content JSON | f14 sender sec_uid.
     """
@@ -132,7 +129,7 @@ def _messages_in_block(tree, block_field):
 def messages_from_conversation_body(raw_body):
     """Older messages from `POST im-api.../v1/message/get_by_conversation` (protobuf).
 
-    Layout confirmed live 2026-09-18: body -> f6 -> f301 -> f1[] = Message.
+    Layout confirmed from a live capture: body -> f6 -> f301 -> f1[] = Message.
     """
     try:
         tree = proto.decode_tree(raw_body)
@@ -199,10 +196,6 @@ def messages_from_frame(raw):
             yield rec
 
 
-def dedup_key(frame_headers, message_id):
-    return f"{frame_headers.get('x_frontier_msg_id', '')}:{message_id}"
-
-
 def messages_from_init_body(raw_body):
     """Existing conversations' recent messages from the REST inbox init.
 
@@ -210,7 +203,7 @@ def messages_from_init_body(raw_body):
     /messages page itself on load) carries the backlog at
     `body -> f6 -> f203 -> f1[]`, each entry being the SAME Message shape as a
     frontier frame (f1 conv, f3 id, f4 ts_us, f7 sender, f8 content). Confirmed
-    live 2026-09-18 (16 messages across several conversations). Yields normalized
+    against a live capture (16 messages across several conversations). Yields normalized
     message dicts; never raises.
     """
     try:

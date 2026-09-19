@@ -1,7 +1,7 @@
 """Cookies import login (mode="cookies").
 
-Accepts a session captured elsewhere -- the laptop -> server transfer (Task D) and
-the future iPhone WKWebView path (Task F) -- and builds a WebSession. The backend
+Accepts a session captured elsewhere -- the laptop -> server transfer and the
+future iPhone WKWebView path (DESIGN.md §10) -- and builds a WebSession. The backend
 context's UA/locale/timezone/viewport are pinned to what was reported and the
 reported ttwid is reused (never rotated). A UA that contradicts an existing
 profile is refused with fingerprint_mismatch, never silently replaced.

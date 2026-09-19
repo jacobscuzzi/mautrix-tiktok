@@ -1,3 +1,4 @@
+"""Mobile signed-API client -- documented alternative, not the shipped path (DESIGN.md §1)."""
 import random
 import time
 from . import proto
@@ -63,6 +64,8 @@ class IM:
         resp = self.c.post_im("/v1/message/send/", request)
         return _parse_send_response(resp, cmid)
 
+    # Response parsing for the mobile path was never reached: the path is blocked by
+    # device registration before any conversation list comes back (DESIGN.md §1).
     def _parse_conv_list(self, resp):
         return []
 

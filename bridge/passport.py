@@ -1,3 +1,4 @@
+"""Mobile signed-API client -- documented alternative, not the shipped path (DESIGN.md §1)."""
 import json
 from urllib.parse import urlencode
 from . import errors

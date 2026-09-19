@@ -55,7 +55,7 @@ def extract_text(content):
 
 
 # message_type -> canonical kind. 1=text; the rest are best-effort [Inf] from the
-# mobile IM SDK and the webcast findings, refined when a real DM of each is seen.
+# mobile IM SDK and the web console capture, refined when a real DM of each is seen.
 _KIND = {1: "text", 2: "image", 5: "video", 7: "share", 8: "share"}
 
 

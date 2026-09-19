@@ -1,18 +1,24 @@
 """LiveBridge -- the running bridge for the demo wrapper.
 
-One background thread owns Playwright (the sync API is single-threaded). For each
-connected user it holds a persistent, stealth browser context, detects the real
-TikTok login, encrypts the session at rest, and syncs that user's real contacts /
+One background thread owns Playwright (the sync API is single-threaded). The demo
+runs a single login (`login_id = "session"`, one persistent browser profile); the
+multi-login shape is `BridgeRuntime` in app.py. For that login it detects the real
+TikTok login, seals the session at rest, and syncs the account's real contacts /
 threads / messages into the SQLite pipeline -- REST through the in-page signer,
 realtime over the frontier websocket. HTTP handlers call the thread-safe methods
 here (connect / status / logout); reads come from the pipeline.
 
-Security: the session blob is envelope-encrypted (`session_store`, AES-GCM, per-user
-data key wrapped by a master key). On logout everything for that login is wiped:
-the session blob, the pipeline rows, and the browser profile.
+Security: the session blob is envelope-encrypted (`session_store`, AES-GCM, per-login
+data key wrapped by a master key); without `BRIDGE_MASTER_KEY` the key is ephemeral
+and the blob does not survive a restart. What survives a restart is the Chromium
+profile directory under `data_dir`, protected only by file permissions, and the
+SQLite cache is plaintext. On logout everything for that login is wiped: the
+session blob, the pipeline rows, and the browser profile.
 """
 from __future__ import annotations
 
+import collections
+import logging
 import os
 import queue
 import shutil
@@ -29,6 +35,8 @@ from .state import SyncState
 from .sync import Syncer
 from .web import session as websess
 from .web.page import PageClient, playwright_evaluator
+
+log = logging.getLogger("bridge.live")
 
 LOGIN_URL = "https://www.tiktok.com/login/phone-or-email/email"
 QR_URL = "https://www.tiktok.com/login/qrcode"
@@ -53,7 +61,6 @@ class LiveLogin:
         self.account = None            # {handle, uid, nickname, avatar}
         self.last_error = None
         self.password_login_used = (flow == "password")
-        self.connected_at = None
         self.last_sync_ms = 0
         self.authenticated = False
         self.qr_png = None             # base64 QR image, shown in the wrapper UI
@@ -88,13 +95,17 @@ class LiveBridge:
         os.makedirs(data_dir, exist_ok=True)
         self.db_path = db_path or os.path.join(data_dir, "bridge.sqlite")
         self.pipeline = Pipeline(self.db_path)
-        self.store = SessionStore(data_dir, master_key or os.urandom(32))
+        if master_key is None:
+            log.warning("BRIDGE_MASTER_KEY not set: using an ephemeral key, the sealed "
+                        "session will not be readable after a restart")
+            master_key = os.urandom(32)
+        self.store = SessionStore(data_dir, master_key)
         self.headless = headless
         self.poll_seconds = poll_seconds
         self.login_timeout = login_timeout
         self.logins = {}
         self.error_totals = {}
-        self.lags = []
+        self.lags = collections.deque(maxlen=1000)   # recent delivery lags (s)
         self._lock = threading.Lock()
         self._q = queue.Queue()
         self._stop = threading.Event()
@@ -126,7 +137,7 @@ class LiveBridge:
         with self._lock:
             self.logins[login_id] = login
         self.pipeline.upsert_login(login_id, source="web", state=OPENING,
-                                   password_login_used=True)
+                                   password_login_used=login.password_login_used)
         self._q.put(("open", login_id))
         return login_id
 
@@ -279,8 +290,8 @@ class LiveBridge:
                         "/v2/message/get_by_user_init",
                         "/v1/message/get_by_conversation") + (
                         "?" + resp.url.split("?", 1)[1] if "?" in resp.url else "")
-        except Exception:
-            pass
+        except Exception as e:  # noqa: BLE001
+            log.debug("response capture skipped: %s", e)
 
     def _attach_ws(self, login, ws):
         if "im-ws.tiktok.com" in ws.url and login.provider:
@@ -325,23 +336,23 @@ class LiveBridge:
             return bool(page.evaluate(
                 "() => /maximum number of attempts|too many attempts|try again later/i"
                 ".test((document.body && document.body.innerText) || '')"))
-        except Exception:
+        except Exception as e:  # noqa: BLE001
+            log.debug("login-blocked check failed: %s", e)
             return False
 
     def _establish(self, login, cookies):
         page = login.page
         # Clear any stale data from a previous session/account so the shown chats
         # always match the account that is actually logged in now. Without this the
-        # UI shows phantom conversations that no longer exist -> sending to them
-        # fails ("could not open that conversation").
+        # UI shows phantom conversations that no longer exist.
         self.pipeline.wipe_login(login.login_id)
         self.pipeline.upsert_login(login.login_id, source="web", state=CONNECTING,
                                    password_login_used=login.password_login_used)
         try:
             page.goto(MESSAGES_URL, wait_until="domcontentloaded", timeout=45000)
             page.wait_for_timeout(3500)
-        except Exception:
-            pass
+        except Exception as e:  # noqa: BLE001
+            log.debug("/messages load: %s", e)
         pc = PageClient(playwright_evaluator(page))
         login.provider = WebProvider(pc, avatar_client=None)
         # subscribe frontier -> ingest live messages
@@ -357,14 +368,14 @@ class LiveBridge:
             try:
                 page.goto(MESSAGES_URL, wait_until="domcontentloaded", timeout=45000)
                 page.wait_for_timeout(3000)
-            except Exception:
+            except Exception as e:  # noqa: BLE001
+                log.debug("/messages reload: %s", e)
                 break
             self._ingest_init(login)
         # first sync (contacts, account label)
         self._sync_now(login, first=True)
         self._resolve_peers(login)
         login.authenticated = True
-        login.connected_at = time.time()
         self._set_state(login, CONNECTED)
 
     def _ingest_init(self, login):
@@ -435,8 +446,8 @@ class LiveBridge:
             uid = self._own_uid(login)
             sess = websess.WebSession.from_storage_state(state, self._meta(login), uid=uid)
             self.store.save(login.login_id, sess.to_blob())
-        except Exception:
-            pass
+        except Exception as e:  # noqa: BLE001
+            log.warning("could not seal the session at rest: %s", e)
 
     def _meta(self, login):
         try:
@@ -444,7 +455,8 @@ class LiveBridge:
                 "() => ({ua: navigator.userAgent, lang: navigator.language,"
                 " tz: Intl.DateTimeFormat().resolvedOptions().timeZone,"
                 " iw: innerWidth, ih: innerHeight})")
-        except Exception:
+        except Exception as e:  # noqa: BLE001
+            log.debug("fingerprint read failed: %s", e)
             return {}
 
     def _own_uid(self, login):
@@ -454,15 +466,16 @@ class LiveBridge:
                 " if(!el) return ''; try { const d = JSON.parse(el.textContent);"
                 " return d.__DEFAULT_SCOPE__['webapp.app-context'].user.uid || ''; } catch(e){ return ''; } }")
             return uid or ""
-        except Exception:
+        except Exception as e:  # noqa: BLE001
+            log.debug("own uid read failed: %s", e)
             return ""
 
     def _sync_tick(self, login):
         # pump websocket events, and poll REST gently
         try:
             login.page.wait_for_timeout(300)
-        except Exception:
-            pass
+        except Exception as e:  # noqa: BLE001
+            log.debug("event pump: %s", e)
         # a conversation list that rendered after connect: ingest it now
         if login.init_bodies:
             self._ingest_init(login)
@@ -481,8 +494,8 @@ class LiveBridge:
                 login.account = {"contacts": len(users)}
         except errors.AuthError as e:
             return self._fail(login, NEEDS_USER, e)
-        except errors.BridgeError:
-            pass
+        except errors.BridgeError as e:
+            self._note(login, e)
         # own profile / account label
         self._set_account(login)
         # conversations + messages
@@ -494,8 +507,8 @@ class LiveBridge:
             syncer.poll_once()
         except errors.AuthError as e:
             return self._fail(login, NEEDS_USER, e)
-        except errors.BridgeError:
-            pass
+        except errors.BridgeError as e:
+            self._note(login, e)
         login.last_sync_ms = int(time.time() * 1000)
         self.pipeline.set_login_state(login.login_id, CONNECTED,
                                       last_sync_ts=login.last_sync_ms)
@@ -512,8 +525,8 @@ class LiveBridge:
                 " avatar: (u.avatarUri && u.avatarUri[0]) || ''}; } catch(e){ return null; } }")
             if info and info.get("handle"):
                 login.account = info
-        except Exception:
-            pass
+        except Exception as e:  # noqa: BLE001
+            log.debug("account label read failed: %s", e)
 
     def _ingest_message(self, login, m):
         """Ingest one normalized message dict. Returns True if newly inserted."""
@@ -554,6 +567,15 @@ class LiveBridge:
             self.error_totals[state] = self.error_totals.get(state, 0) + 1
         self.pipeline.set_login_state(login.login_id, state, login.last_error)
 
+    def _note(self, login, exc):
+        """A recoverable provider error: the login stays connected, but it is counted
+        and surfaced -- a SchemaChange here means TikTok changed a response shape."""
+        state = "schema_change" if isinstance(exc, errors.SchemaChange) else "transient"
+        login.last_error = f"{type(exc).__name__}: {exc}"
+        with self._lock:
+            self.error_totals[state] = self.error_totals.get(state, 0) + 1
+        log.info("%s during sync of %s: %s", state, login.login_id, exc)
+
     def _do_logout(self, login_id):
         login = self.logins.get(login_id)
         if not login:
@@ -561,15 +583,12 @@ class LiveBridge:
         try:
             if login.ctx:
                 login.ctx.close()
-        except Exception:
-            pass
+        except Exception as e:  # noqa: BLE001
+            log.debug("context close on logout: %s", e)
         # wipe everything for this login (data deletion on logout)
         self.store.delete(login_id)
         self.pipeline.wipe_login(login_id)
-        try:
-            shutil.rmtree(login.profile_dir, ignore_errors=True)
-        except Exception:
-            pass
+        shutil.rmtree(login.profile_dir, ignore_errors=True)
         with self._lock:
             login.state = LOGGED_OUT
             login.provider = None
@@ -581,5 +600,5 @@ class LiveBridge:
             try:
                 if login.ctx:
                     login.ctx.close()
-            except Exception:
-                pass
+            except Exception as e:  # noqa: BLE001
+                log.debug("context close on shutdown: %s", e)

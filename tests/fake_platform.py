@@ -11,7 +11,7 @@ HTTP, including the failure paths that are untestable against tiktok.com.
 
 Modes: normal | wrong_password | twofa | locked. `mode` picks what
 POST /passport/login does. The DOM uses the same data-e2e / input names the real
-login page uses (pinned from the Task A capture), so the same selectors drive both.
+login page uses (pinned from the logged-in capture), so the same selectors drive both.
 """
 from __future__ import annotations
 

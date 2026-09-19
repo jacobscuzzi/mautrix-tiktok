@@ -1,3 +1,4 @@
+"""Mobile signed-API client -- documented alternative, not the shipped path (DESIGN.md §1)."""
 from . import proto
 from . import errors
 

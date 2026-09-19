@@ -6,16 +6,17 @@ satisfy, so `Syncer`/`SyncState`/`normalize`/`metrics` are reused unchanged.
 
 Transport is a `PageClient` (in-page signed fetch). Every parser is fixture-driven
 and raises `SchemaChange` on a renamed/missing container rather than returning
-silent garbage. Realtime rides the frontier websocket; on any gap (reconnect,
-reload, `x_frontier_msg_id` discontinuity) the provider triggers a REST reconcile
-through the existing Syncer dedup path.
+silent garbage. Realtime rides the frontier websocket; after a reconnect or reload
+the caller flags a gap (`note_gap`) and `reconcile_if_gap` re-pulls through the
+Syncer dedup path. In the demo app the periodic REST poll plays that role.
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 
-from .. import errors, normalize
+from .. import errors, normalize, proto
 from ..web import frontier
 
 log = logging.getLogger("bridge.web")
@@ -157,7 +158,6 @@ class WebProvider:
         self.page = page_client
         self.session = session
         self.avatars = avatar_client or AvatarClient()
-        self._last_frontier_id = None
         self._gap = False
         self._pb = None
         self._tmpl = None
@@ -173,8 +173,6 @@ class WebProvider:
     def get_older_messages(self, conv_id, short_id, before_cursor_us, count=30):
         """One older page for a conversation via the in-page-signed protobuf call.
         Returns (message_dicts, next_cursor_us, has_more)."""
-        from .. import proto
-        from ..web import frontier
         if not (self._pb and self._tmpl and self._conv_url and short_id):
             raise errors.NotSupported("history pagination not configured")
         tree = {k: list(v) for k, v in self._tmpl.items()}
@@ -219,9 +217,8 @@ class WebProvider:
 
     def get_profiles(self, user_ids):
         # the page's own call is GET .../im/user/profile/?user_ids=["<uid>",...]  [Obs]
-        import json as _json
         resp = self.page.call("GET", PROFILE_URL,
-                              {"user_ids": _json.dumps([str(u) for u in user_ids]),
+                              {"user_ids": json.dumps([str(u) for u in user_ids]),
                                "aid": "1988"})
         users = _require(resp, "users")
         out = []
@@ -238,26 +235,23 @@ class WebProvider:
         return out
 
     def send_text(self, conv_id, text, client_message_id=""):
-        # No send_text fixture was captured (allow-send: no). Refuse honestly
-        # rather than blind-fire an unverified request against a real account.
+        # A web DM send is a signed websocket frame built by TikTok's own page code,
+        # not a request we can replay (DESIGN.md §13). Refuse rather than blind-fire.
         raise errors.NotSupported(
-            "web send_text not enabled: no captured send fixture (allow-send was no); "
-            "wire it from a capture run with --allow-send before enabling")
+            "web send_text is not available: sending needs the page's own signed "
+            "websocket frame (DESIGN.md §13)")
 
     def mark_read(self, conv_id):
-        raise errors.NotSupported("web mark_read not enabled: no captured fixture")
+        raise errors.NotSupported("web mark_read is not available (read-only bridge)")
 
     # realtime -----------------------------------------------------------------
 
     def on_frontier_frame(self, raw):
         """Feed a raw frontier frame; return normalized message dicts (0+).
 
-        Detects a gap via x_frontier_msg_id discontinuity and flags a reconcile.
+        The frame's `x_frontier_msg_id` travels with each message as `raw_ref`; gap
+        detection by id continuity is not implemented (the REST poll re-pulls).
         """
-        frame = frontier.decode_frame(raw)
-        mid = frame["headers"].get("x_frontier_msg_id")
-        # any non-empty new id is fine; we only use it as the dedup/raw ref.
-        self._last_frontier_id = mid or self._last_frontier_id
         return list(frontier.messages_from_frame(raw))
 
     def subscribe(self, sink):

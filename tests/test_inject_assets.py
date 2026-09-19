@@ -1,6 +1,7 @@
 """Each injected JS asset must install cleanly and not touch navigator properties.
 
-The Task F contract: the WKWebView host assets install at document-start without
+The iPhone-path contract (DESIGN.md §10): the WKWebView host assets install at
+document-start without
 changing fingerprinted `navigator` fields (webmssdk cross-checks them). Skipped
 when no browser is available.
 """

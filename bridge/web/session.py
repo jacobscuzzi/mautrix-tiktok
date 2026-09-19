@@ -11,10 +11,7 @@ from dataclasses import dataclass, field
 
 from .. import errors
 
-# Cookies that matter for a web session (others are analytics noise).
-SESSION_COOKIES = ("sessionid", "sessionid_ss", "sid_tt", "sid_guard", "uid_tt",
-                   "ttwid", "msToken", "odin_tt", "store-idc", "tt-target-idc")
-# hosts whose is-alive candidate we trust
+# the cheapest logged-in check the capture shows (error_code 0 = alive)
 ALIVE_PATH = "https://www.tiktok.com/passport/token/beat/web/"
 MESSAGES_URL = "https://www.tiktok.com/messages"
 

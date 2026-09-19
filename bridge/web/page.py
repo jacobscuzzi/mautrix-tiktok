@@ -1,4 +1,4 @@
-"""PageClient: one persistent browser context + page per web login.
+"""PageClient: the signed in-page call for one web login.
 
 `call(method, url, params, body)` runs `fetch` INSIDE the page, so TikTok's own
 webmssdk signs it (confirmed live: the in-page probe re-signs a stripped URL).

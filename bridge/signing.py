@@ -1,3 +1,4 @@
+"""Mobile signed-API client -- documented alternative, not the shipped path (DESIGN.md §1)."""
 import base64
 import json
 import subprocess

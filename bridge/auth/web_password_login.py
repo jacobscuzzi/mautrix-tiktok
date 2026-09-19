@@ -7,7 +7,7 @@ credentials: bad_credentials, refuse further automatic attempts; locked: blocked
 
 Never retry a challenge. Never auto-loop logins. The browser work is behind a
 `driver` so the state machine is unit-testable without a browser; the real driver
-(`PlaywrightPasswordDriver`) pins selectors from the Task A capture in one place.
+(`PlaywrightPasswordDriver`) pins selectors from the login-page capture in one place.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 log = logging.getLogger("bridge.auth.web_password")
 
-# Selectors pinned from browser-data/jakob DOM dumps, verified 2026-09-18. A
+# Selectors pinned from the login-page DOM dump of the capture (verified 2026-09-18). A
 # missing selector is a schema change, not a crash.
 SELECTORS = {
     "verified": "2026-09-18",

@@ -1,4 +1,4 @@
-"""Stealth browser factory for the web path.
+"""Persistent browser factory for the web path: one fixed profile per user.
 
 One persistent Chromium context per user, launched from that user's
 `browser-data/<user>/profile` directory so the device identity (ttwid, wid,
@@ -16,11 +16,13 @@ from __future__ import annotations
 import json
 import os
 
-# Only the automation tells we can remove without touching navigator properties
-# (the observation notes: webmssdk cross-checks navigator, so do not overwrite it).
-STEALTH_ARGS = ["--disable-blink-features=AutomationControlled"]
+# The only automation tells removed: Chromium's AutomationControlled flag and the
+# "controlled by automated software" banner. Nothing touches navigator properties
+# (observed live: webmssdk cross-checks them), nothing is randomized or rotated.
+LAUNCH_ARGS = ["--disable-blink-features=AutomationControlled"]
 IGNORE_DEFAULT = ["--enable-automation"]
 
+# Fingerprint for a profile that has no meta.json yet; a capture's meta.json wins.
 DEFAULT_META = {
     "ua": ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
            "(KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"),
@@ -56,7 +58,7 @@ def _launch_kwargs(profile_dir, headless, extra_args):
     return dict(
         user_data_dir=profile_dir,
         headless=headless,
-        args=STEALTH_ARGS + list(extra_args or []),
+        args=LAUNCH_ARGS + list(extra_args or []),
         ignore_default_args=IGNORE_DEFAULT,
     )
 
