@@ -18,12 +18,12 @@ from urllib.parse import urlencode, urlparse, parse_qs
 
 AUTHORIZE_URL = "https://tikapi.io/account/authorize"
 
-DM_SCOPES = [
+DM_SCOPES = (
     "view_messages",
     "send_messages",
     "conversation_requests",
     "view_notifications",
-]
+)
 
 
 def authorize_url(client_id, redirect_uri, scope=DM_SCOPES, state=None,

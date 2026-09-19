@@ -206,7 +206,7 @@ class TestSend(unittest.TestCase):
             p.send_text("c1", "twice", client_message_id="dup")
 
     def test_mark_read_surfaces_unsupported(self):
-        with self.assertRaises(errors.InvalidRequest):
+        with self.assertRaises(errors.NotSupported):
             provider([]).mark_read("c1")
 
 

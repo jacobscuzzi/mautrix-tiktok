@@ -1,3 +1,6 @@
+# Image for the mobile-path probe only (`python -m bridge.cmd.run probe`), the
+# documented alternative. The shipped web path needs Playwright + Chromium and runs
+# with ./bridge-app.sh (see README).
 FROM python:3.12-slim
 
 WORKDIR /app

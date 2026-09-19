@@ -47,7 +47,7 @@ class TestLadderE2E(unittest.TestCase):
     def test_first_login_succeeds(self):
         with FakePlatform(password="hunter2") as fp:
             page = self.browser.new_context().new_page()
-            out = Ladder(self._driver(fp, page)).connect("jakob", "hunter2")
+            out = Ladder(self._driver(fp, page)).connect("alice", "hunter2")
             self.assertEqual(out.state, CONNECTED)
 
     def test_session_reuse_across_restart_zero_logins(self):
@@ -55,14 +55,14 @@ class TestLadderE2E(unittest.TestCase):
             ctx = self.browser.new_context()
             page = ctx.new_page()
             d1 = self._driver(fp, page)
-            self.assertEqual(Ladder(d1).connect("jakob", "hunter2").state, CONNECTED)
+            self.assertEqual(Ladder(d1).connect("alice", "hunter2").state, CONNECTED)
             state = ctx.storage_state()
             # "restart": brand-new context seeded with the saved session
             ctx2 = self.browser.new_context(storage_state=state)
             page2 = ctx2.new_page()
             d2 = self._driver(fp, page2)
             d2.password_login = self._forbidden  # any login here is a bug
-            out = Ladder(d2).connect("jakob", "hunter2")
+            out = Ladder(d2).connect("alice", "hunter2")
             self.assertEqual(out.state, CONNECTED)
 
     @staticmethod
@@ -74,7 +74,7 @@ class TestLadderE2E(unittest.TestCase):
             ctx = self.browser.new_context()
             page = ctx.new_page()
             d = self._driver(fp, page)
-            Ladder(d).connect("jakob", "hunter2")
+            Ladder(d).connect("alice", "hunter2")
             fp.logout_all()  # session invalidated server-side
             calls = {"n": 0}
             real = d.password_login
@@ -82,26 +82,26 @@ class TestLadderE2E(unittest.TestCase):
                 calls["n"] += 1
                 return real(u, p)
             d.password_login = counting
-            out = Ladder(d).connect("jakob", "hunter2")
+            out = Ladder(d).connect("alice", "hunter2")
             self.assertEqual(out.state, CONNECTED)
             self.assertEqual(calls["n"], 1)
 
     def test_wrong_password_bad_credentials(self):
         with FakePlatform(password="hunter2") as fp:
             page = self.browser.new_context().new_page()
-            out = Ladder(self._driver(fp, page)).connect("jakob", "WRONG")
+            out = Ladder(self._driver(fp, page)).connect("alice", "WRONG")
             self.assertEqual(out.state, BAD_CREDENTIALS)
 
     def test_twofa_stops_with_needs_user(self):
         with FakePlatform(mode="twofa", password="hunter2") as fp:
             page = self.browser.new_context().new_page()
-            out = Ladder(self._driver(fp, page)).connect("jakob", "hunter2")
+            out = Ladder(self._driver(fp, page)).connect("alice", "hunter2")
             self.assertEqual(out.state, NEEDS_USER)
 
     def test_locked_is_blocked(self):
         with FakePlatform(mode="locked", password="hunter2") as fp:
             page = self.browser.new_context().new_page()
-            out = Ladder(self._driver(fp, page)).connect("jakob", "hunter2")
+            out = Ladder(self._driver(fp, page)).connect("alice", "hunter2")
             self.assertEqual(out.state, BLOCKED)
 
 

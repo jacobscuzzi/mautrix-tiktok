@@ -2,9 +2,9 @@
 # One command to run the TikTok DM bridge + tester wrapper. Installs everything it
 # needs on the first run (venv, deps, Chromium), then starts the app and opens your
 # browser. Re-running is fast.
-set -euo pipefail
+set -eu
 cd "$(dirname "$0")"
-./setup.sh
+sh ./setup.sh
 if [ -f .chromium-libs/ldpath.txt ]; then
   export LD_LIBRARY_PATH="$(cat .chromium-libs/ldpath.txt)"
 fi

@@ -1,6 +1,12 @@
 .venv/
 .git/
+.claude/
 sessions/
+browser-data/
+.chromium-libs/
 config.yaml
+*.session
+*.key
 __pycache__/
 *.pyc
+tests/

@@ -7,8 +7,7 @@ no device fingerprint, no protobuf, no proxy management — TikAPI owns all of t
 server-side. In exchange we take a paid vendor dependency and a polling-only
 inbound path.
 
-Confirmed from TikAPI's OpenAPI docs (2026-09-17, see
-the TikAPI trade-off, DESIGN.md §1):
+Confirmed from TikAPI's OpenAPI docs (2026-09-17; the trade-off is in DESIGN.md §1):
 
 - Base URL            https://api.tikapi.io   (sandbox https://sandbox.tikapi.io)
 - Auth headers        X-API-KEY (developer key) + X-ACCOUNT-KEY (per-user OAuth token)
@@ -30,6 +29,7 @@ real and unit-tested against fixtures.
 import json
 
 from .. import errors
+from ..normalize import extract_text
 
 BASE_URL = "https://api.tikapi.io"
 SANDBOX_URL = "https://sandbox.tikapi.io"
@@ -47,26 +47,9 @@ def _requests_transport():
     return call
 
 
-def _extract_text(content):
-    """TikTok DM `content` is a JSON string like {"text":"hi","aweType":0}.
-
-    Accept a dict, a JSON string, or plain text and always return plain text.
-    """
-    if content is None:
-        return ""
-    if isinstance(content, dict):
-        return content.get("text") or content.get("content") or ""
-    if isinstance(content, (bytes, bytearray)):
-        content = content.decode("utf-8", "replace")
-    if isinstance(content, str):
-        s = content.strip()
-        if s.startswith("{"):
-            try:
-                return _extract_text(json.loads(s))
-            except ValueError:
-                return content
-        return content
-    return str(content)
+# TikTok DM `content` is a JSON string like {"text":"hi","aweType":0}; the shared
+# normalizer turns a dict, a JSON string or plain text into plain text.
+_extract_text = extract_text
 
 
 class TikApiProvider:
@@ -212,7 +195,7 @@ class TikApiProvider:
     def mark_read(self, conv_id):
         # TikAPI exposes conversation-request accept/delete but no documented
         # mark-read endpoint. Surface that honestly rather than silently no-op.
-        raise errors.InvalidRequest("tikapi: mark_read not supported by vendor API")
+        raise errors.NotSupported("tikapi: mark_read not supported by vendor API")
 
     def check_session(self):
         """True if the account session is still valid (GET /user/session/check)."""

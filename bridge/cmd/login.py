@@ -27,7 +27,7 @@ def main(argv=None):
     mode = argv[0] if argv else "email"
     dev = Device.generate()
     store = SessionStore("./sessions", master_key=b"0" * 32)
-    email_flow = EmailCodeFlow(_DemoPassport(dev), "j.baumfalk@yahoo.de")
+    email_flow = EmailCodeFlow(_DemoPassport(dev), "user@example.com")
     proc = LoginProcess(dev, store, _DemoQR(), _DemoBrowser(), email_flow)
 
     step = proc.start(mode)

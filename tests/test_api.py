@@ -75,7 +75,7 @@ class TestAPI(unittest.TestCase):
         lid = start["login_id"]
         self.assertEqual(start["step"]["kind"], "user_input")
         _, res = self._json("POST", f"/v1/login/{lid}/step",
-                            {"username": "jakob", "password": "right"})
+                            {"username": "alice", "password": "right"})
         self.assertTrue(res["complete"])
         self.assertEqual(res["state"], "connected")
         # status
@@ -94,7 +94,7 @@ class TestAPI(unittest.TestCase):
     def test_bad_password_is_not_complete(self):
         _, start = self._json("POST", "/v1/login/start", {"flow": "password"})
         _, res = self._json("POST", f"/v1/login/{start['login_id']}/step",
-                            {"username": "jakob", "password": "WRONG"})
+                            {"username": "alice", "password": "WRONG"})
         self.assertFalse(res["complete"])
         self.assertEqual(res["state"], "bad_credentials")
 

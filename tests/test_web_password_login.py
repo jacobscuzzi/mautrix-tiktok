@@ -106,13 +106,15 @@ class TestSecretsNotLogged(unittest.TestCase):
                 buf.append(self.format(r))
 
         logger = logging.getLogger("bridge.auth.web_password")
+        old_level, handler = logger.level, H()
         logger.setLevel(logging.DEBUG)
-        logger.addHandler(H())
+        logger.addHandler(handler)
         try:
             d = FakeDriver(alive=False, result=LoginResult("bad_credentials"))
-            Ladder(d).connect("jakob", "hunter2-secret")
+            Ladder(d).connect("alice", "hunter2-secret")
         finally:
-            logger.removeHandler(logger.handlers[-1])
+            logger.removeHandler(handler)
+            logger.setLevel(old_level)
         joined = "\n".join(buf)
         self.assertNotIn("hunter2-secret", joined)
 

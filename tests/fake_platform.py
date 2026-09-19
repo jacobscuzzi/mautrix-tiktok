@@ -47,7 +47,7 @@ LOCKED_HTML = """<!doctype html><html><head><title>Account locked</title></head>
 
 
 class FakePlatform:
-    def __init__(self, mode="normal", username="jakob", password="hunter2"):
+    def __init__(self, mode="normal", username="alice", password="hunter2"):
         self.mode = mode
         self.username = username
         self.password = password

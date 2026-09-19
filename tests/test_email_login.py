@@ -20,18 +20,18 @@ class TestEmailLogin(unittest.TestCase):
     def test_email_flow_sends_code_then_completes(self):
         dev = Device.generate()
         pp = FakePassport(dev)
-        flow = EmailCodeFlow(pp, "j.baumfalk@yahoo.de")
+        flow = EmailCodeFlow(pp, "user@example.com")
         store = SessionStore(tempfile.mkdtemp(), master_key=b"0" * 32)
         proc = LoginProcess(dev, store, email_flow=flow)
 
         step = proc.start("email")
         self.assertEqual(step.kind, "user_input")
         self.assertEqual(step.data["field"], "email_code")
-        self.assertEqual(pp.sent, "j.baumfalk@yahoo.de")
+        self.assertEqual(pp.sent, "user@example.com")
 
         final = proc.submit_code("123456")
         self.assertEqual(final.kind, "complete")
-        self.assertEqual(pp.logged, ("j.baumfalk@yahoo.de", "123456"))
+        self.assertEqual(pp.logged, ("user@example.com", "123456"))
         self.assertTrue(proc.device.is_authenticated)
         self.assertEqual(proc.device.sessionid, "mail")
 

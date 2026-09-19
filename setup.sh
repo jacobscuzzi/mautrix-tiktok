@@ -2,7 +2,7 @@
 # Install everything the bridge needs: the venv, Python deps, and the Chromium
 # browser. Idempotent and safe to re-run; only installs what is missing. Called
 # automatically by bridge-app.sh, or run it once by hand on a fresh clone.
-set -euo pipefail
+set -eu
 cd "$(dirname "$0")"
 PY=".venv/bin/python"
 say() { printf '  \033[36m%s\033[0m\n' "$*"; }
@@ -13,13 +13,15 @@ if [ ! -x "$PY" ]; then
 fi
 if ! "$PY" -m pip --version >/dev/null 2>&1; then
   say "bootstrapping pip…"
-  curl -fsSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
-  "$PY" /tmp/get-pip.py >/dev/null
+  GETPIP="$(mktemp)"
+  curl -fsSL https://bootstrap.pypa.io/get-pip.py -o "$GETPIP"
+  "$PY" "$GETPIP" >/dev/null
+  rm -f "$GETPIP"
 fi
 if ! "$PY" -c "import playwright, cryptography, yaml, requests" >/dev/null 2>&1; then
   say "installing Python dependencies…"
   "$PY" -m pip install -q --upgrade pip
-  "$PY" -m pip install -q playwright cryptography pyyaml requests
+  "$PY" -m pip install -q -r requirements.txt
 fi
 if ! "$PY" - <<'PYCHK' >/dev/null 2>&1
 import glob, os
@@ -30,6 +32,7 @@ PYCHK
 then
   say "installing the Chromium browser (first run only)…"
   if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    say "installing Chromium's system libraries with sudo apt (playwright --with-deps)…"
     "$PY" -m playwright install --with-deps chromium || "$PY" -m playwright install chromium
   else
     "$PY" -m playwright install chromium

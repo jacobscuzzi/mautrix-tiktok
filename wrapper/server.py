@@ -50,7 +50,7 @@ class _Handler(BaseHTTPRequestHandler):
         if path in ("", "/"):
             path = "/index.html"
         full = os.path.normpath(os.path.join(STATIC, path.lstrip("/")))
-        if not full.startswith(STATIC) or not os.path.isfile(full):
+        if not full.startswith(STATIC + os.sep) or not os.path.isfile(full):
             self.send_error(404)
             return
         with open(full, "rb") as f:

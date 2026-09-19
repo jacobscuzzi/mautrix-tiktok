@@ -1,17 +1,16 @@
 """One logged-in TikTok web capture -> browser-data/<user>/.
 
-Drives a persistent stealth browser (bridge/auth/browser.py) to a logged-in
+Drives a persistent browser (bridge/auth/browser.py) to a logged-in
 `/messages`, and records every DM-relevant request/response, every frontier
 websocket frame, the hydration blob, the login-page DOM, an in-page signing
 probe, and the browser fingerprint. Nothing is injected into the page: TikTok's
 own webmssdk signs, we only tap Playwright's native network + websocket events.
 
-  ./run-web-capture.sh --mode manual --headful --user jakob
+  ./run-web-capture.sh --mode manual --headful --user <name>
 
 Modes:
-  manual  the human logs in and triggers a DM (gate G1);
-  auto    the password ladder logs in (Task C wires this; not for real TikTok
-          overnight -- fake platform only).
+  manual  a human logs in and triggers a DM (the only mode implemented; the
+          password ladder is exercised against the fake platform in the tests).
 
 The session is saved encrypted into session_store and, transiently, as
 storage_state.json (gitignored). Delete the plaintext after importing it.
@@ -206,8 +205,7 @@ def run(user, *, mode="manual", headful=False, allow_send=False, channel=None,
                         return cap_path
                 rec.rec("login_success", url=page.url, seconds=round(time.time() - t0))
             else:
-                raise SystemExit("auto mode: wire bridge.auth.web_password_login (Task C); "
-                                 "do not run against real TikTok overnight")
+                raise SystemExit("only --mode manual is implemented")
 
             page.goto(MESSAGES_URL, wait_until="domcontentloaded")
             page.wait_for_timeout(4000)
@@ -290,7 +288,7 @@ def _as_b64(data):
 def main(argv=None):
     ap = argparse.ArgumentParser(description="TikTok web DM capture")
     ap.add_argument("--user", required=True)
-    ap.add_argument("--mode", choices=("manual", "auto"), default="manual")
+    ap.add_argument("--mode", choices=("manual",), default="manual")
     ap.add_argument("--headful", action="store_true")
     ap.add_argument("--allow-send", action="store_true")
     ap.add_argument("--channel", choices=("chrome", "chromium"), default=None)

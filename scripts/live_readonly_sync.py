@@ -1,4 +1,4 @@
-"""G4: live, READ-ONLY sync with the captured session (overnight, allow-send: no).
+"""Live, READ-ONLY check of a captured session.
 
 Launches the persistent profile that logged in, checks liveness via the signed
 in-page token/beat call, and — if alive — pulls contacts + conversations through
@@ -6,9 +6,9 @@ the real WebProvider into a scratch pipeline, then holds the frontier socket
 briefly for any inbound frame. No sends, no mark-read, no profile edits. Gentle:
 one pass + a short watch, not a night-long hold.
 
-  .venv/bin/python scripts/g4_live_sync.py --user jakob --watch 60
+  .venv/bin/python scripts/live_readonly_sync.py --user <name> --watch 60
 
-Outcome (connected / needs_user / error) is printed for the DECISIONS log.
+Prints a JSON outcome (connected / needs_user / error).
 """
 import argparse
 import json
@@ -30,11 +30,13 @@ MESSAGES_URL = "https://www.tiktok.com/messages"
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--user", default="jakob")
+    ap.add_argument("--user", required=True)
     ap.add_argument("--watch", type=int, default=60)
-    ap.add_argument("--db", default="/tmp/claude-1000/g4-live.sqlite")
+    ap.add_argument("--db", default=None,
+                    help="scratch SQLite (default: browser-data/<user>/live-check.sqlite)")
     a = ap.parse_args()
     out = os.path.join("browser-data", a.user)
+    a.db = a.db or os.path.join(out, "live-check.sqlite")
 
     import base64
     from bridge.web import frontier
@@ -42,7 +44,7 @@ def main():
     result = {"user": a.user, "started": time.strftime("%Y-%m-%d %H:%M:%S")}
     frames = {"in": 0}
     # save every inbound frame so a real DM is never lost, and decode it live.
-    cap_path = os.path.join(out, f"capture-g4-{int(time.time())}.jsonl")
+    cap_path = os.path.join(out, f"capture-live-{int(time.time())}.jsonl")
     cap = open(cap_path, "a", encoding="utf-8")
     dm_texts = []            # (conversation_id, sender, text) extracted live
     richest = {"len": 0, "tree": None, "headers": None}

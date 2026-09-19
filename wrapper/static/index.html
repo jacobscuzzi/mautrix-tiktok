@@ -107,8 +107,9 @@
   <section id="view-connect">
     <div class="card">
       <h1>Connect your TikTok account</h1>
-      <p class="lead">The bridge signs you in through TikTok's own login page in a real browser
-        window on this machine, then reads your conversations on the backend.</p>
+      <p class="lead">The bridge signs you in through TikTok's own login page (a QR code shown
+        right here, or a real browser window on this machine for password login), then reads
+        your conversations on the backend.</p>
       <div id="connect-actions" style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap">
         <button class="primary" onclick="connect('qr')">Scan a QR code</button>
         <button class="ghost" onclick="connect('password')">Use password / email</button>
@@ -130,9 +131,10 @@
       <div class="sec">
         <div class="item"><b>Your password is never stored</b><span>You type it into TikTok's own
           page. The bridge never receives or persists it — only the resulting session.</span></div>
-        <div class="item"><b>Session encrypted at rest</b><span>The session is sealed with
-          AES-GCM: a per-user data key, itself wrapped by a master key. The plaintext never
-          touches disk.</span></div>
+        <div class="item"><b>Session sealed at rest</b><span>The session is additionally
+          stored as an AES-GCM blob (a per-login data key, wrapped by a master key). The
+          browser profile and the local message cache on this machine are not encrypted;
+          both are deleted on logout.</span></div>
         <div class="item"><b>Deleted on logout</b><span>Log out and every trace — session,
           messages, contacts and the browser profile — is wiped from this machine.</span></div>
         <div class="item"><b>One stable identity, log in once</b><span>Your browser profile is
@@ -147,7 +149,7 @@
   <section id="view-chats" class="hidden">
     <div class="card" style="display:flex;align-items:center;gap:16px">
       <div class="acct" id="acct"></div>
-      <span class="hint" style="margin:0 0 0 14px">Keep the TikTok window open in the background — closing it disconnects.</span>
+      <span class="hint" style="margin:0 0 0 14px">Password login keeps a Chrome window open — closing it disconnects. QR login has no window.</span>
       <button class="ghost" style="margin-left:auto" onclick="refresh(this)">Refresh</button>
       <button class="ghost" onclick="logout(this)">Log out &amp; wipe</button>
     </div>

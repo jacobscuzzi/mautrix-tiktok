@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Decode captured frontier (pbbp2) websocket frames.
 
-  python scripts/decode-frontier.py browser-data/jakob/capture-*.jsonl
+  .venv/bin/python scripts/decode-frontier.py 'browser-data/<name>/capture-*.jsonl'
 
 The web DM realtime channel is `wss://im-ws.tiktok.com/ws/v2`, length-delimited
 protobuf ("pbbp2"). Each frame is a `Frame`:
@@ -10,8 +10,7 @@ protobuf ("pbbp2"). Each frame is a `Frame`:
   field 3  service          field 8  payload bytes (gunzip when field 6 == "gzip")
   field 4  method
 
-This prints the field tree per frame, flags UTF-8 text runs in the payload, and
-writes a frontier-fields.md skeleton to fill in by hand.
+This prints the field tree per frame and flags UTF-8 text runs in the payload.
 """
 import base64
 import glob
@@ -89,38 +88,6 @@ def main(argv):
             if fr.get("text_runs"):
                 print("  text:", fr["text_runs"][:10])
 
-    _write_skeleton(frames)
-    print("\nwrote frontier-fields.md")
-
-
-def _write_skeleton(frames):
-    methods_in = sorted({str(f.get("headers", {}).get("X-Method")) for f in frames["ws_in"]})
-    with open("frontier-fields.md", "w") as f:
-        f.write("# Frontier websocket (pbbp2) — decoded field map\n\n")
-        f.write("Decoded from `browser-data/jakob` with `scripts/decode-frontier.py`. The\n"
-                "account inbox was **empty** at capture, so these frames are the subscribe\n"
-                "hello and the server's sync/cursor pushes — no DM message payload was\n"
-                "captured. Field numbers below are `[Obs]` for the framing, `[Inf]` for the\n"
-                "message-body layout (mirrored from the mobile IM SDK / webcast findings).\n\n")
-        f.write("## Frame envelope [Obs]\n\n")
-        f.write("| field | meaning |\n|---|---|\n"
-                "| 1 | seqid |\n| 2 | logid (ns) |\n| 3 | service (33554513 IM, 20032 push) |\n"
-                "| 4 | method (2 = subscribe) |\n| 5 | repeated header map {1:key, 2:value} |\n"
-                "| 6 | payload encoding (\"gzip\" \\| \"\") |\n| 8 | payload (gunzip when field 6==gzip) |\n\n")
-        f.write("## Outbound subscribe/hello [Obs]\n\n")
-        if frames["ws_out"]:
-            f.write("```\n" + str(frames["ws_out"][0].get("tree")) + "\n```\n\n")
-        f.write("`body{1:{1:2, 2:device_id, 3:device_id, 4:ts}, 2:[repeated cursor {1:topic, 3:idx}]}`"
-                " — the client subscribes to inbox topics with cursor positions.\n\n")
-        f.write("## Inbound headers seen\n\n")
-        f.write("X-Method values: " + ", ".join(m for m in methods_in if m != "None") + "\n\n")
-        f.write("## Inbound payload (sync/cursor; DM body TODO) [Inf]\n\n")
-        if frames["ws_in"]:
-            f.write("```\n" + str(frames["ws_in"][0].get("tree"))[:1200] + "\n```\n\n")
-        f.write("**TODO once a real DM is captured:** the message payload rides one\n"
-                "`X-Method: PayloadRelatedMethod` frame; decode its inner body to\n"
-                "`(conversation_id, message_id, ts, sender_id, text)` and pin the field\n"
-                "numbers here. `x_frontier_msg_id` (header) + message id = the dedup key.\n")
 
 
 if __name__ == "__main__":

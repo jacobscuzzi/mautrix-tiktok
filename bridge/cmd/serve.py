@@ -9,6 +9,7 @@ demo is a single command; internally the wrapper is just a client of the bridge.
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import shutil
 import subprocess
@@ -59,16 +60,20 @@ def main(argv=None):
     ap.add_argument("--wrapper-port", type=int, default=8770)
     ap.add_argument("--bridge-port", type=int, default=8771)
     ap.add_argument("--headless", action="store_true",
-                    help="run the login browser headless (no real login possible)")
+                    help="run the password-login browser headless too (QR login is always "
+                         "headless; a headless password login cannot be completed by hand)")
     ap.add_argument("--no-open", action="store_true")
     ap.add_argument("--data-dir", default="browser-data/_live")
     a = ap.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="  %(levelname)s %(name)s: %(message)s")
 
     master_key = None
     env_key = os.environ.get("BRIDGE_MASTER_KEY")
     if env_key:
         import base64
         master_key = base64.b64decode(env_key)
+        if len(master_key) != 32:
+            raise SystemExit("BRIDGE_MASTER_KEY must be 32 bytes, base64-encoded")
 
     live = LiveBridge(data_dir=a.data_dir, master_key=master_key, headless=a.headless)
     live.start()
@@ -85,7 +90,7 @@ def main(argv=None):
     print(f"\n  TikTok DM Bridge tester\n"
           f"  wrapper UI : {url}\n"
           f"  bridge API : http://127.0.0.1:{a.bridge_port}  (/metrics for Prometheus)\n"
-          f"  data dir   : {a.data_dir}  (sessions encrypted at rest; wiped on logout)\n"
+          f"  data dir   : {a.data_dir}  (session sealed at rest; everything wiped on logout)\n"
           f"  Ctrl-C to stop.\n")
     if not a.no_open:
         if open_url(url):

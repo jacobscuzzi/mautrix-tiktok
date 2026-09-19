@@ -35,8 +35,8 @@ function show(view) {
 
 /* ---- connect flow ---- */
 const LABELS = {
-  opening_browser: "Opening a login window…",
-  waiting_login: "Log in to TikTok in the window that opened.",
+  opening_browser: "Starting the browser…",
+  waiting_login: "Waiting for your TikTok login…",
   connecting: "Signing in and reading your conversations…",
   connected: "Connected.",
   needs_user: "Login needs you (challenge, 2FA, or it timed out).",
@@ -47,12 +47,19 @@ const DOT = { connected: "ok", needs_user: "warn", error: "bad" };
 async function connect(flow) {
   $("connect-actions").classList.add("hidden");
   $("connect-status").classList.remove("hidden");
-  setStatus("opening_browser");
-  const res = await api("/api/connect", { method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ flow: flow || "password" }) });
-  LOGIN_ID = res.login_id;
   CONNECT_FLOW = flow || "password";
+  setStatus("opening_browser");
+  let res;
+  try {
+    res = await api("/api/connect", { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ flow: CONNECT_FLOW }) });
+  } catch (e) {
+    setStatus("error", "The bridge is not reachable: " + e.message);
+    $("connect-actions").classList.remove("hidden");
+    return;
+  }
+  LOGIN_ID = res.login_id;
   POLL = setInterval(pollStatus, 1200);
 }
 let CONNECT_FLOW = "password";
@@ -91,8 +98,8 @@ async function pollStatus() {
     $("tab-chats").disabled = false;
     renderAccount(st.account);
     show("chats");
-    refreshChats();
-    POLL = setInterval(refreshChats, 5000);
+    refreshChats().catch(() => {});
+    POLL = setInterval(() => refreshChats().catch(() => {}), 5000);
   } else if (st.state === "needs_user" || st.state === "error") {
     clearInterval(POLL); POLL = null;
     $("connect-actions").classList.remove("hidden");
@@ -102,15 +109,17 @@ async function pollStatus() {
 /* ---- chats ---- */
 function renderAccount(a) {
   if (!a) { $("acct").innerHTML = ""; return; }
-  const av = a.avatar ? `<img class="avatar" src="${a.avatar}">` : `<div class="avatar"></div>`;
-  $("acct").innerHTML = `${av}<div><div class="h">${a.nickname || a.handle || "You"}</div>
-    <div class="u">@${a.handle || ""}</div></div>`;
+  const av = a.avatar ? `<img class="avatar" src="${escapeHtml(a.avatar)}">` : `<div class="avatar"></div>`;
+  $("acct").innerHTML = `${av}<div><div class="h">${escapeHtml(a.nickname || a.handle || "You")}</div>
+    <div class="u">@${escapeHtml(a.handle || "")}</div></div>`;
 }
 
 // manual Refresh button: same sync, but with visible feedback
 async function refresh(btn) {
-  await busy(btn, async () => { await refreshChats(); });
-  toast("Up to date", "ok");
+  try {
+    await busy(btn, async () => { await refreshChats(); });
+    toast("Up to date", "ok");
+  } catch (e) { toast("Refresh failed: " + e.message, "bad"); }
 }
 
 async function refreshChats() {
@@ -122,17 +131,17 @@ async function refreshChats() {
     const other = otherParty(t);
     const c = byId[other] || {};
     const name = c.nickname || c.handle || shortConv(t.thread_id);
-    const av = c.avatar_url ? `<img class="avatar" src="${c.avatar_url}">` : `<div class="avatar"></div>`;
+    const av = c.avatar_url ? `<img class="avatar" src="${escapeHtml(c.avatar_url)}">` : `<div class="avatar"></div>`;
     return `<div class="row ${t.thread_id === CUR_THREAD ? "active" : ""}"
-              onclick="openThread('${t.thread_id}','${(name || "").replace(/'/g, "")}')">
-              ${av}<div><div class="name">${name}</div>
+              data-tid="${escapeHtml(t.thread_id)}" data-name="${escapeHtml(name || "")}">
+              ${av}<div><div class="name">${escapeHtml(name)}</div>
               <div class="sub">${t.thread_type === "group" ? "group" : "direct message"}</div></div></div>`;
   });
   // contacts without a thread yet, so the list is never empty after connect
   const threadOthers = new Set(data.threads.map(otherParty));
   const extra = data.contacts.filter((c) => !threadOthers.has(c.user_id)).slice(0, 50).map((c) => {
-    const av = c.avatar_url ? `<img class="avatar" src="${c.avatar_url}">` : `<div class="avatar"></div>`;
-    return `<div class="row" style="opacity:.7"><div>${av}</div><div><div class="name">${c.nickname || c.handle}</div>
+    const av = c.avatar_url ? `<img class="avatar" src="${escapeHtml(c.avatar_url)}">` : `<div class="avatar"></div>`;
+    return `<div class="row" style="opacity:.7"><div>${av}</div><div><div class="name">${escapeHtml(c.nickname || c.handle)}</div>
             <div class="sub">contact</div></div></div>`;
   });
   let header = "";
@@ -144,6 +153,14 @@ async function refreshChats() {
   $("threads").innerHTML = header + rows.join("") + extra.join("");
   if (CUR_THREAD) loadMessages(CUR_THREAD);
 }
+
+// one delegated click handler for the thread list (rows carry data-tid / data-name)
+document.addEventListener("DOMContentLoaded", () => {
+  $("threads").addEventListener("click", (ev) => {
+    const row = ev.target.closest(".row[data-tid]");
+    if (row) openThread(row.dataset.tid, row.dataset.name);
+  });
+});
 
 function otherParty(t) {
   const parts = (t.thread_id || "").split(":");

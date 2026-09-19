@@ -23,7 +23,7 @@ class StubLive:
     class _L:
         def __init__(self, lid, state):
             self.login_id, self.state = lid, state
-            self.account = {"handle": "jakob", "uid": "42", "nickname": "Jakob"}
+            self.account = {"handle": "alice", "uid": "42", "nickname": "Alice"}
         def public(self):
             return {"login_id": self.login_id, "state": self.state, "account": self.account,
                     "last_error": None, "last_sync_ms": 0}
@@ -42,7 +42,7 @@ class StubLive:
         self.pipeline.upsert_login(lid, state="connected", password_login_used=True)
         self.pipeline.upsert_user(lid, User("7072", "Bob", "http://a", handle="bob"))
         self.pipeline.upsert_thread(lid, Thread("0:1:42:7072", ["42", "7072"], last_ts=5))
-        self.pipeline.ingest_event(Event("m1", "0:1:42:7072", "7072", "hi jakob", 5), lid)
+        self.pipeline.ingest_event(Event("m1", "0:1:42:7072", "7072", "hi alice", 5), lid)
         return lid
 
     def status(self, lid):
@@ -127,7 +127,7 @@ class TestWebapp(unittest.TestCase):
         self.assertTrue(chats["threads"] and chats["contacts"])
         tid = chats["threads"][0]["thread_id"]
         _, msgs = self._get_json(f"/api/messages?login_id={lid}&thread_id={tid}")
-        self.assertEqual(msgs[0]["content"], "hi jakob")
+        self.assertEqual(msgs[0]["content"], "hi alice")
 
     def test_health_and_metrics_through_proxy(self):
         self._post("/api/connect")

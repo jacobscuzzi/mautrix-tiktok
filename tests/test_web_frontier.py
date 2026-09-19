@@ -88,12 +88,12 @@ class TestFrontier(unittest.TestCase):
         self.assertTrue(msgs[0]["content"])
 
     def test_real_captured_dm_frames_if_present(self):
-        # decode the real (gitignored) G4 DM capture if it exists on this machine;
+        # decode the real (gitignored) live DM capture if it exists on this machine;
         # proves the parser on live data without committing anyone's real messages.
         import glob
-        caps = glob.glob("browser-data/*/capture-g4-*.jsonl")
+        caps = glob.glob("browser-data/*/capture-live-*.jsonl")
         if not caps:
-            self.skipTest("no live G4 capture present")
+            self.skipTest("no live DM capture present")
         found = 0
         for cap in caps:
             with open(cap) as fh:
@@ -106,7 +106,7 @@ class TestFrontier(unittest.TestCase):
                     found += 1
                     self.assertTrue(m["server_message_id"])
                     self.assertTrue(m["conversation_id"].count(":") >= 2)
-        self.assertGreater(found, 0, "expected at least one real DM in the G4 capture")
+        self.assertGreater(found, 0, "expected at least one real DM in the live capture")
 
 
 class TestInitBacklog(unittest.TestCase):

@@ -1,12 +1,12 @@
 #!/bin/sh
 # Live logged-in TikTok web capture -> browser-data/<user>/
 #
-#   ./run-web-capture.sh --mode manual --headful --user jakob
+#   ./run-web-capture.sh --mode manual --headful --user <name>
 #
-# Needs the venv with Playwright + Chromium (setup.sh). On the datacenter server
-# the shared libs come from .chromium-libs/ (LD_LIBRARY_PATH); on a laptop with a
-# GUI use --headful so you can log in and trigger a DM. --allow-send only if the
-# capture-notes / gate explicitly allow a send.
+# Needs the venv with Playwright + Chromium (setup.sh). On a server without the
+# system libraries the shared libs come from .chromium-libs/ (LD_LIBRARY_PATH); on a
+# laptop with a GUI use --headful so you can log in and trigger a DM. --allow-send
+# also records one outgoing DM; it is off by default.
 set -e
 cd "$(dirname "$0")"
 if [ -f .chromium-libs/ldpath.txt ]; then

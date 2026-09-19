@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Export a captured laptop session to the server through the cookies flow.
 
-  python scripts/export-session.py --user jakob --to https://server/v1
+  .venv/bin/python scripts/export-session.py --user <name> --to https://server/v1
 
 Reads browser-data/<user>/storage_state.json + meta.json, builds the cookies-import
 payload, and POSTs it to the API's cookies login flow. The session is re-encrypted
 on import server-side; the laptop and server master keys need not match. Plaintext
-storage_state.json is shredded after a confirmed import (see FINISH-HERE.md / G4).
+storage_state.json should be deleted once the import is confirmed.
 """
 import argparse
 import json
