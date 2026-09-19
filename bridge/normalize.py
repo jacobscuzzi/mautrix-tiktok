@@ -1,5 +1,8 @@
 import json
+import logging
 from dataclasses import dataclass, field
+
+log = logging.getLogger("bridge.normalize")
 
 # Canonical records shared by every provider (native mobile, web, tikapi). The
 # bridgev2 mapping: Thread -> Portal, User -> Ghost, Event -> Message. Fields are
@@ -167,17 +170,93 @@ def _media_of(content):
     return "image", url
 
 
+# keys that mark a shared TikTok video / post inside a DM content JSON
+_SHARE_KEYS = ("aweme", "aweme_id", "awemeId", "aweme_info", "awemeInfo", "itemId",
+               "item_id", "itemID", "video", "videoId", "video_id", "share", "shareInfo",
+               "share_info")
+# confirmed live 2026-09-19: a shared video is aweType 800 with content_title
+# (the caption, optional), content_name (the author), cover_url, itemId, uid.
+_TITLE_KEYS = ("content_title", "title", "desc", "description", "text", "content")
+_AUTHOR_KEYS = ("content_name", "author", "nickname", "name")
+
+
+def _as_dict(content):
+    if isinstance(content, dict):
+        return content
+    if isinstance(content, (bytes, bytearray)):
+        content = content.decode("utf-8", "replace")
+    if isinstance(content, str) and content.strip().startswith("{"):
+        try:
+            obj = json.loads(content)
+        except ValueError:
+            return None
+        return obj if isinstance(obj, dict) else None
+    return None
+
+
+_share_shapes = set()
+
+
+def _share_of(obj):
+    """(is_share, title) for a content dict that carries a shared video/post."""
+    if not any(k in obj for k in _SHARE_KEYS):
+        return False, ""
+    keys = frozenset(obj.keys())
+    if keys not in _share_shapes:      # once per shape: which keys a share carries
+        _share_shapes.add(keys)
+        log.info("share DM content keys=%s aweType=%s", sorted(obj.keys()), obj.get("aweType"))
+    parts = []
+    for keys in (_TITLE_KEYS, _AUTHOR_KEYS):
+        for k in keys:
+            v = obj.get(k)
+            if isinstance(v, str) and v.strip():
+                parts.append(v.strip())
+                break
+    return True, " · ".join(parts)
+
+
+_warned_shapes = set()
+
+
+def _note_unknown_shape(obj):
+    """Log an unrecognized content shape ONCE per key-set (keys only, no values)."""
+    keys = frozenset(obj.keys())
+    if keys in _warned_shapes:
+        return
+    _warned_shapes.add(keys)
+    log.warning("DM content shape not recognized (keys=%s, aweType=%s); shown as "
+                "'unsupported message'. Add it to normalize.to_event.",
+                sorted(obj.keys()), obj.get("aweType"))
+
+
 def to_event(d):
     raw = d.get("content") if d.get("content") is not None else d.get("text")
     text = extract_text(raw)
     media_kind, media_url = _media_of(raw)
-    if media_url:
-        kind, body = media_kind, media_url
+    obj = _as_dict(raw)
+    is_share, share_title = _share_of(obj) if obj is not None else (False, "")
+    ext = d.get("ext") or {}
+    if is_share:
+        kind, body = "share", share_title          # a shared video/post (+ caption)
+    elif media_url:
+        kind, body = media_kind, media_url         # gif / sticker / image
+    elif obj is None and "s:visible" in ext:
+        # a server-side notice shown to ONE participant ("say hi", request hints):
+        # not JSON (a typed DM always is) and not something anyone wrote.
+        # Confirmed live 2026-09-19 (content was the 2-byte "pl").
+        kind, body = "system", ""
+    elif text:
+        kind, body = _kind_of(d, text), text
     elif isinstance(raw, str) and raw.strip() == "{}":
         # a sticker whose media rides outside the content JSON [Obs]: label it
         kind, body = "sticker", ""
     else:
-        kind, body = _kind_of(d, text), text
+        kind, body = _kind_of(d, text), text       # message_type hint, if any
+        if kind == "text":
+            # no text, no media, no hint: never show it as a blank text message
+            if obj is not None:
+                _note_unknown_shape(obj)
+            kind = "unknown"
     return Event(
         message_id=str(d.get("server_message_id") or d.get("message_id") or ""),
         conversation_id=str(d.get("conversation_id") or ""),
